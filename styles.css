@@ -107,6 +107,12 @@
 .st-notes-section {
   margin-top: 20px;
 }
+.st-detail-poster {
+  max-width: 240px;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 12px;
+}
 .st-notes-textarea {
   width: 100%;
   min-height: 100px;

@@ -36,5 +36,17 @@ export class SeriesTrackerSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }),
       );
+
+    new Setting(containerEl)
+      .setName("Movies folder")
+      .setDesc("Vault-relative folder containing your movie notes.")
+      .addText((text) =>
+        text
+          .setValue(this.plugin.settings.moviesFolder)
+          .onChange(async (value) => {
+            this.plugin.settings.moviesFolder = value.trim();
+            await this.plugin.saveSettings();
+          }),
+      );
   }
 }

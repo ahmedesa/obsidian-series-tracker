@@ -152,10 +152,10 @@ export class OmdbClient {
   }
 
   /** One-off title search, not cached (queries vary too much to be worth caching). */
-  async searchSeries(title: string): Promise<OmdbSearchResult[]> {
+  async searchTitles(title: string, type: "series" | "movie"): Promise<OmdbSearchResult[]> {
     if (!this.apiKey || !title.trim()) return [];
     try {
-      const url = `https://www.omdbapi.com/?apikey=${this.apiKey}&s=${encodeURIComponent(title)}&type=series`;
+      const url = `https://www.omdbapi.com/?apikey=${this.apiKey}&s=${encodeURIComponent(title)}&type=${type}`;
       const { json } = await this.fetcher(url);
       if (json.Response !== "True") return [];
       return (json.Search ?? []).map((r: any) => ({

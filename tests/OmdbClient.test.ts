@@ -97,7 +97,7 @@ describe("OmdbClient", () => {
     global.fetch = vi.fn().mockResolvedValue({ json: async () => mockResponse }) as any;
     const client = new OmdbClient("fake-key", {}, vi.fn());
 
-    const results = await client.searchSeries("Severance");
+    const results = await client.searchTitles("Severance", "series");
 
     expect(results).toEqual([
       { title: "Severance", year: "2022–", imdbId: "tt11280740", poster: "https://example.com/severance.jpg" },
@@ -108,7 +108,7 @@ describe("OmdbClient", () => {
   it("returns an empty array with no key", async () => {
     global.fetch = vi.fn() as any;
     const client = new OmdbClient("", {}, vi.fn());
-    const results = await client.searchSeries("Severance");
+    const results = await client.searchTitles("Severance", "series");
     expect(results).toEqual([]);
     expect(fetch).not.toHaveBeenCalled();
   });
