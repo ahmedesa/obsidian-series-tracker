@@ -17,11 +17,26 @@ interface CacheEntry {
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Minimal fetch abstraction so OmdbClient stays a pure, testable module
+ * with no dependency on the `obsidian` package. Production callers should
+ * inject a fetcher backed by Obsidian's `requestUrl` (CORS-safe on both
+ * desktop and mobile); tests can inject a fake. Defaults to global `fetch`
+ * for backwards-compatible testability.
+ */
+export type OmdbFetcher = (url: string) => Promise<{ json: any }>;
+
+async function defaultFetcher(url: string): Promise<{ json: any }> {
+  const res = await fetch(url);
+  return { json: await res.json() };
+}
+
 export class OmdbClient {
   constructor(
     private apiKey: string,
     private cache: Record<string, CacheEntry>,
     private saveCache: (cache: Record<string, CacheEntry>) => Promise<void>,
+    private fetcher: OmdbFetcher = defaultFetcher,
   ) {}
 
   private cacheKey(imdbId: string, season: number): string {
@@ -38,8 +53,7 @@ export class OmdbClient {
 
     try {
       const url = `https://www.omdbapi.com/?apikey=${this.apiKey}&i=${imdbId}&Season=${season}`;
-      const res = await fetch(url);
-      const json = await res.json();
+      const { json } = await this.fetcher(url);
       if (json.Response !== "True") return cached?.data ?? null;
 
       const data: OmdbSeasonResponse = {
