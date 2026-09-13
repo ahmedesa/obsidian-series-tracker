@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS: SeriesTrackerSettings = {
 };
 
 export default class SeriesTrackerPlugin extends Plugin {
-  settings: SeriesTrackerSettings;
+  settings!: SeriesTrackerSettings;
 
   async onload() {
     await this.loadSettings();
