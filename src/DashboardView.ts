@@ -1,6 +1,6 @@
 import { ItemView, WorkspaceLeaf, TFile, Notice } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
-import { parseSeriesBody, parseFrontmatter, splitFrontmatter, ParsedSeries } from "./SeriesParser";
+import { parseSeriesBody, parseFrontmatter, splitFrontmatter, ParsedSeries, STATUS_OPTIONS, statusLabel } from "./SeriesParser";
 import { renderShowDetail } from "./ShowDetailView";
 import { AddSeriesModal } from "./AddSeriesModal";
 
@@ -12,6 +12,9 @@ export class DashboardView extends ItemView {
   // Monotonically-incrementing counter so overlapping async renders can
   // detect they've been superseded and bail out before touching the DOM.
   private renderGeneration = 0;
+  // Dashboard filter state — in-memory only, resets on view close.
+  private filterText = "";
+  private filterStatus: string | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: SeriesTrackerPlugin) {
     super(leaf);
@@ -101,22 +104,74 @@ export class DashboardView extends ItemView {
     container.empty();
     container.addClass("series-tracker-view");
 
+    const header = container.createDiv({ cls: "st-dashboard-header" });
+
+    // Free-text filter — matches on title, case-insensitive.
+    const filterInput = header.createEl("input", {
+      type: "text",
+      cls: "st-filter-input",
+      placeholder: "Filter shows…",
+    });
+    filterInput.value = this.filterText;
+    filterInput.addEventListener("input", () => {
+      this.filterText = filterInput.value;
+      this.render();
+    });
+
+    // Status filter — a button that opens a dropdown of the 5 statuses,
+    // each showing how many tracked shows currently have it.
+    const statusWrap = header.createDiv({ cls: "st-status-filter-wrap" });
+    const statusBtn = statusWrap.createEl("button", {
+      cls: "st-status-filter-btn",
+      text: this.filterStatus ? `Status: ${statusLabel(this.filterStatus)} ✕` : "+ Status",
+    });
+    const statusMenu = statusWrap.createDiv({ cls: "st-status-menu" });
+    let statusMenuOpen = false;
+    statusMenu.hide();
+
+    const counts: Record<string, number> = {};
+    for (const { parsed } of all) {
+      const s = parsed.frontmatter.status;
+      counts[s] = (counts[s] ?? 0) + 1;
+    }
+
+    for (const opt of STATUS_OPTIONS) {
+      const row = statusMenu.createDiv({ cls: "st-status-menu-row" });
+      row.createSpan({ text: opt.label });
+      row.createSpan({ cls: "st-status-menu-count", text: String(counts[opt.value] ?? 0) });
+      row.addEventListener("click", () => {
+        this.filterStatus = this.filterStatus === opt.value ? null : opt.value;
+        this.render();
+      });
+    }
+    statusBtn.addEventListener("click", () => {
+      statusMenuOpen = !statusMenuOpen;
+      statusMenu.toggle(statusMenuOpen);
+    });
+
+    const addBtn = header.createEl("button", { cls: "st-add-series", text: "+ Add series" });
+    addBtn.addEventListener("click", () => {
+      new AddSeriesModal(this.app, this.plugin, () => this.render()).open();
+    });
+
+    const filtered = all.filter(({ parsed }) => {
+      if (this.filterStatus && parsed.frontmatter.status !== this.filterStatus) return false;
+      if (this.filterText.trim() && !parsed.frontmatter.title.toLowerCase().includes(this.filterText.trim().toLowerCase())) {
+        return false;
+      }
+      return true;
+    });
+
     let totalEp = 0;
     let watchedEp = 0;
     let inProgress = 0;
-    for (const { parsed } of all) {
+    for (const { parsed } of filtered) {
       const episodes = parsed.seasons.flatMap((s) => s.episodes);
       const watched = episodes.filter((e) => e.watched).length;
       totalEp += episodes.length;
       watchedEp += watched;
       if (watched > 0 && watched < episodes.length) inProgress++;
     }
-
-    const header = container.createDiv({ cls: "st-dashboard-header" });
-    const addBtn = header.createEl("button", { cls: "st-add-series", text: "+ Add series" });
-    addBtn.addEventListener("click", () => {
-      new AddSeriesModal(this.app, this.plugin, () => this.render()).open();
-    });
 
     const stats = container.createDiv({ cls: "st-stats" });
     const tile1 = stats.createDiv({ cls: "st-tile" });
@@ -128,11 +183,11 @@ export class DashboardView extends ItemView {
     tile2.createDiv({ cls: "st-tile-label", text: "Shows in progress" });
 
     const tile3 = stats.createDiv({ cls: "st-tile" });
-    tile3.createDiv({ cls: "st-tile-value", text: `${all.length}` });
-    tile3.createDiv({ cls: "st-tile-label", text: "Shows tracked" });
+    tile3.createDiv({ cls: "st-tile-value", text: `${filtered.length}` });
+    tile3.createDiv({ cls: "st-tile-label", text: this.filterStatus || this.filterText ? "Shows matching" : "Shows tracked" });
 
     const grid = container.createDiv({ cls: "st-grid" });
-    for (const { file, parsed } of all) {
+    for (const { file, parsed } of filtered) {
       const episodes = parsed.seasons.flatMap((s) => s.episodes);
       const watched = episodes.filter((e) => e.watched).length;
       const pct = episodes.length ? Math.round((100 * watched) / episodes.length) : 0;
@@ -142,11 +197,16 @@ export class DashboardView extends ItemView {
         card.createEl("img", { attr: { src: parsed.frontmatter.image } });
       }
       card.createDiv({ cls: "st-card-title", text: parsed.frontmatter.title });
+      card.createDiv({ cls: "st-card-status", text: statusLabel(parsed.frontmatter.status) });
       card.createDiv({ cls: "st-card-progress", text: `${watched}/${episodes.length} (${pct}%)` });
       card.onClickEvent(() => {
         this.currentFile = file;
         this.render();
       });
+    }
+
+    if (filtered.length === 0 && all.length > 0) {
+      grid.createEl("p", { cls: "st-empty-state", text: "No shows match the current filter." });
     }
   }
 

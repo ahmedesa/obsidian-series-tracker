@@ -7,8 +7,10 @@ import {
   toggleEpisodeLine,
   splitFrontmatter,
   setFrontmatterNumberField,
+  setFrontmatterStringField,
   getNotesSection,
   setNotesSection,
+  STATUS_OPTIONS,
 } from "./SeriesParser";
 import { OmdbClient, OmdbFetcher } from "./OmdbClient";
 
@@ -36,6 +38,30 @@ export async function renderShowDetail(
     const seasons = parseSeriesBody(body);
 
     container.createEl("h2", { text: fm.title });
+
+    // Status — same 5 options as the dashboard's status filter.
+    const statusRow = container.createDiv({ cls: "st-status-row" });
+    statusRow.createSpan({ text: "Status: " });
+    const statusSelect = statusRow.createEl("select", { cls: "st-status-select" });
+    for (const opt of STATUS_OPTIONS) {
+      statusSelect.createEl("option", { value: opt.value, text: opt.label });
+    }
+    statusSelect.value = fm.status;
+    statusSelect.addEventListener("change", async () => {
+      const next = statusSelect.value;
+      const previous = fm.status;
+      try {
+        await app.vault.process(file, (data) => {
+          const live = splitFrontmatter(data);
+          return setFrontmatterStringField(live.frontmatterBlock, "status", next) + live.body;
+        });
+        fm.status = next;
+      } catch (err) {
+        statusSelect.value = previous;
+        console.error("Series Tracker: failed to write status", err);
+        new Notice(`Series Tracker: failed to save status — ${errorMessage(err)}`);
+      }
+    });
 
     // Personal rating — dropdown 0-5 (plus "Unrated"), written back to the
     // `rating` frontmatter field (mirrors the Movies notes' rating convention).

@@ -18,6 +18,22 @@ export interface SeriesFrontmatter {
   source_url: string;
 }
 
+/**
+ * The status values shown in the dashboard/detail-view status pickers, in
+ * display order, each paired with its human-readable label.
+ */
+export const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "want-to-watch", label: "Wishlist" },
+  { value: "watching", label: "Pending" },
+  { value: "up-to-date", label: "Up to date" },
+  { value: "finished", label: "Completed" },
+  { value: "abandoned", label: "Abandoned" },
+];
+
+export function statusLabel(status: string): string {
+  return STATUS_OPTIONS.find((s) => s.value === status)?.label ?? status;
+}
+
 export interface ParsedSeries {
   frontmatter: SeriesFrontmatter;
   seasons: Season[];
@@ -115,6 +131,24 @@ export function setFrontmatterNumberField(
     return frontmatterBlock.replace(lineRe, `${key}: ${valueStr}`);
   }
   return frontmatterBlock.replace(/\n---\n?$/, `\n${key}: ${valueStr}\n---\n`);
+}
+
+/**
+ * Sets or inserts a string frontmatter field (e.g. `status: watching`)
+ * inside an already-extracted frontmatter block. Mirrors
+ * setFrontmatterNumberField but writes the value unquoted (matches the
+ * convention already used for `status`/`source` elsewhere in the vault).
+ */
+export function setFrontmatterStringField(
+  frontmatterBlock: string,
+  key: string,
+  value: string,
+): string {
+  const lineRe = new RegExp(`^${key}: .*$`, "m");
+  if (lineRe.test(frontmatterBlock)) {
+    return frontmatterBlock.replace(lineRe, `${key}: ${value}`);
+  }
+  return frontmatterBlock.replace(/\n---\n?$/, `\n${key}: ${value}\n---\n`);
 }
 
 const NOTES_HEADING_RE = /^## Notes\s*$/m;

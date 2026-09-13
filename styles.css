@@ -113,11 +113,68 @@
 }
 .st-dashboard-header {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 12px;
+}
+.st-filter-input {
+  flex: 1;
+  padding: 6px 10px;
 }
 .st-add-series {
   font-weight: 600;
+}
+.st-status-filter-wrap {
+  position: relative;
+}
+.st-status-filter-btn {
+  white-space: nowrap;
+}
+.st-status-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-s);
+  z-index: 10;
+  min-width: 180px;
+  overflow: hidden;
+}
+.st-status-menu-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.st-status-menu-row:hover {
+  background: var(--background-secondary);
+}
+.st-status-menu-count {
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+.st-card-status {
+  color: var(--text-accent);
+  font-size: 0.8em;
+  padding: 0 8px;
+}
+.st-empty-state {
+  color: var(--text-muted);
+  grid-column: 1 / -1;
+}
+.st-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.st-status-select {
+  padding: 2px 6px;
 }
 .st-modal-search-row {
   display: flex;

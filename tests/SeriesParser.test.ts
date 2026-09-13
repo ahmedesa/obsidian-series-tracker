@@ -6,6 +6,7 @@ import {
   toggleEpisodeLine,
   splitFrontmatter,
   setFrontmatterNumberField,
+  setFrontmatterStringField,
   getNotesSection,
   setNotesSection,
 } from "../src/SeriesParser";
@@ -108,6 +109,18 @@ describe("setFrontmatterNumberField", () => {
   it("writes literal null when value is null", () => {
     const fm = "---\ntitle: X\nrating: 4\n---\n";
     expect(setFrontmatterNumberField(fm, "rating", null)).toBe("---\ntitle: X\nrating: null\n---\n");
+  });
+});
+
+describe("setFrontmatterStringField", () => {
+  it("replaces an existing string field", () => {
+    const fm = "---\ntitle: X\nstatus: want-to-watch\n---\n";
+    expect(setFrontmatterStringField(fm, "status", "watching")).toBe("---\ntitle: X\nstatus: watching\n---\n");
+  });
+
+  it("inserts the field before the closing fence when absent", () => {
+    const fm = "---\ntitle: X\n---\n";
+    expect(setFrontmatterStringField(fm, "status", "abandoned")).toBe("---\ntitle: X\nstatus: abandoned\n---\n");
   });
 });
 
