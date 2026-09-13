@@ -1,7 +1,7 @@
 {
   "id": "series-tracker",
   "name": "Series Tracker",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "minAppVersion": "1.7.2",
   "description": "Dashboard, episode tracker, and watchlist for TV series and movie notes.",
   "author": "Ahmed Essa",

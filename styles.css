@@ -415,6 +415,56 @@
   font-size: 0.8em;
   padding: 2px 8px;
 }
+.st-metrics-section {
+  margin-bottom: 28px;
+}
+.st-metrics-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.st-metrics-bar-label {
+  width: 120px;
+  flex-shrink: 0;
+  font-size: 0.9em;
+}
+.st-metrics-bar-track {
+  flex: 1;
+  height: 10px;
+  background: var(--background-secondary);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.st-metrics-bar-fill {
+  height: 100%;
+  background: var(--text-accent);
+  border-radius: 5px;
+}
+.st-metrics-bar-count {
+  width: 28px;
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+.st-metrics-taste-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 0.9em;
+}
+.st-metrics-taste-row .st-metrics-bar-label {
+  width: 100px;
+}
+.st-metrics-taste-pos {
+  color: var(--text-success);
+  font-weight: 600;
+}
+.st-metrics-taste-neg {
+  color: var(--text-error);
+  font-weight: 600;
+}
 .st-recently-watched-info {
   flex: 1;
 }
