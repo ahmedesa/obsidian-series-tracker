@@ -34,6 +34,13 @@ export function isSeriesEnded(year: string | undefined | null): boolean {
   return !/[-–]\s*$/.test(year.trim());
 }
 
+/** Parses OMDb's `Runtime` field (e.g. `"45 min"`) to minutes. 0 if missing/unparsable. */
+export function parseRuntimeMinutes(runtime: string | undefined | null): number {
+  if (!runtime) return 0;
+  const m = runtime.match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
 export interface OmdbSearchResult {
   title: string;
   year: string;

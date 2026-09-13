@@ -289,3 +289,32 @@
 .st-upcoming-episode {
   color: var(--text-muted);
 }
+.st-recently-watched-container {
+  margin-top: 24px;
+}
+.st-recently-watched-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.st-recently-watched-thumb {
+  width: 28px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.st-recently-watched-info {
+  flex: 1;
+}
+.st-recently-watched-show {
+  font-weight: 600;
+}
+.st-recently-watched-episode {
+  color: var(--text-muted);
+}
+.st-recently-watched-date {
+  color: var(--text-faint);
+  font-size: 0.85em;
+}

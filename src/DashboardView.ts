@@ -12,9 +12,10 @@ import {
 } from "./SeriesParser";
 import { renderShowDetail } from "./ShowDetailView";
 import { AddSeriesModal } from "./AddSeriesModal";
-import { OmdbClient, OmdbFetcher } from "./OmdbClient";
+import { OmdbClient, OmdbFetcher, parseRuntimeMinutes } from "./OmdbClient";
 import { todayIso } from "./dateUtil";
 import { UpcomingEpisode, findNextUp, findUpcoming, groupUpcomingByDate } from "./upcoming";
+import { findRecentlyWatched } from "./recentlyWatched";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
 
@@ -209,6 +210,13 @@ export class DashboardView extends ItemView {
     tile3.createDiv({ cls: "st-tile-value", text: `${filtered.length}` });
     tile3.createDiv({ cls: "st-tile-label", text: this.filterStatus || this.filterText ? "Shows matching" : "Shows tracked" });
 
+    // Placeholder now; populated once loadTimeSpent (below) resolves — it
+    // needs a per-show OMDb runtime lookup, so it can't be computed here
+    // synchronously without blocking the rest of the dashboard.
+    const tile4 = stats.createDiv({ cls: "st-tile" });
+    const tile4Value = tile4.createDiv({ cls: "st-tile-value", text: "—" });
+    tile4.createDiv({ cls: "st-tile-label", text: "Time spent watching" });
+
     const grid = container.createDiv({ cls: "st-grid" });
     for (const { file, parsed } of filtered) {
       const episodes = parsed.seasons.flatMap((s) => s.episodes);
@@ -234,6 +242,18 @@ export class DashboardView extends ItemView {
 
     const upcomingContainer = container.createDiv({ cls: "st-upcoming-container" });
 
+    // Recently watched — pure local data (watchedDate is already parsed
+    // into each episode), so this renders immediately, no fetch needed.
+    const recentlyWatchedContainer = container.createDiv({ cls: "st-recently-watched-container" });
+    this.renderRecentlyWatched(
+      recentlyWatchedContainer,
+      all.map(({ parsed }) => ({
+        title: parsed.frontmatter.title,
+        image: parsed.frontmatter.image,
+        seasons: parsed.seasons,
+      })),
+    );
+
     // Fetch air-date data for every unwatched episode across ALL tracked
     // shows (cached, so repeat opens are cheap) and populate the Next Up
     // spotlight + Upcoming list once it resolves. Never blocks the rest of
@@ -248,6 +268,71 @@ export class DashboardView extends ItemView {
       .catch((err) => {
         console.error("Series Tracker: failed to load upcoming episodes", err);
       });
+
+    // Time spent watching — needs a per-show OMDb runtime lookup (cached,
+    // same as everything else), so it's fetched separately and patched into
+    // the placeholder tile once it resolves. Independent of the Next Up/
+    // Upcoming fetch above so one slow show doesn't hold up the other.
+    this.loadTimeSpentMinutes(all)
+      .then((minutes) => {
+        if (generation !== this.renderGeneration) return;
+        tile4Value.setText(formatDurationMinutes(minutes));
+      })
+      .catch((err) => {
+        console.error("Series Tracker: failed to compute time spent watching", err);
+      });
+  }
+
+  /**
+   * Sum of (watched episodes × the show's OMDb runtime-in-minutes) across
+   * every tracked show with a resolvable IMDb id. Shows with no runtime
+   * data (missing/unparsable) contribute 0, not an error.
+   */
+  private async loadTimeSpentMinutes(all: { file: TFile; parsed: ParsedSeries }[]): Promise<number> {
+    const omdb = new OmdbClient(
+      this.plugin.settings.omdbApiKey,
+      this.plugin.settings.omdbCache,
+      async (c) => {
+        this.plugin.settings.omdbCache = c;
+        await this.plugin.saveSettings();
+      },
+      obsidianOmdbFetcher,
+    );
+
+    const perShowMinutes = await Promise.all(
+      all.map(async ({ parsed }) => {
+        const watched = parsed.seasons.flatMap((s) => s.episodes).filter((e) => e.watched).length;
+        if (watched === 0) return 0;
+        const imdbId = extractImdbId(parsed.frontmatter.source_url);
+        if (!imdbId) return 0;
+        const info = await omdb.getSeries(imdbId);
+        return watched * parseRuntimeMinutes(info?.runtime);
+      }),
+    );
+
+    return perShowMinutes.reduce((sum, m) => sum + m, 0);
+  }
+
+  private renderRecentlyWatched(
+    container: HTMLElement,
+    shows: { title: string; image: string; seasons: ParsedSeries["seasons"] }[],
+  ): void {
+    container.empty();
+    const recent = findRecentlyWatched(shows);
+    if (recent.length === 0) return;
+
+    container.createEl("h3", { text: "Recently watched" });
+    for (const entry of recent) {
+      const row = container.createDiv({ cls: "st-recently-watched-row" });
+      if (entry.showImage) {
+        row.createEl("img", { cls: "st-recently-watched-thumb", attr: { src: entry.showImage } });
+      }
+      const epNum = `S${entry.season}E${String(entry.episode).padStart(2, "0")}`;
+      const info = row.createDiv({ cls: "st-recently-watched-info" });
+      info.createSpan({ cls: "st-recently-watched-show", text: entry.showTitle });
+      info.createSpan({ cls: "st-recently-watched-episode", text: ` ${epNum} — ${entry.title}` });
+      row.createSpan({ cls: "st-recently-watched-date", text: entry.watchedDate });
+    }
   }
 
   /**
@@ -390,4 +475,16 @@ export class DashboardView extends ItemView {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** e.g. 90 -> "1h 30m", 1500 -> "1d 1h", 45 -> "45m". */
+function formatDurationMinutes(totalMinutes: number): string {
+  if (totalMinutes <= 0) return "0m";
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  return `${minutes}m`;
 }

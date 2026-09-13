@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { OmdbClient, isSeriesEnded } from "../src/OmdbClient";
+import { OmdbClient, isSeriesEnded, parseRuntimeMinutes } from "../src/OmdbClient";
 
 describe("OmdbClient", () => {
   beforeEach(() => {
@@ -135,5 +135,18 @@ describe("isSeriesEnded", () => {
     expect(isSeriesEnded("")).toBe(false);
     expect(isSeriesEnded(undefined)).toBe(false);
     expect(isSeriesEnded(null)).toBe(false);
+  });
+});
+
+describe("parseRuntimeMinutes", () => {
+  it("parses a typical OMDb runtime string", () => {
+    expect(parseRuntimeMinutes("45 min")).toBe(45);
+  });
+
+  it("returns 0 for missing/N-A/unparsable runtime", () => {
+    expect(parseRuntimeMinutes("N/A")).toBe(0);
+    expect(parseRuntimeMinutes("")).toBe(0);
+    expect(parseRuntimeMinutes(undefined)).toBe(0);
+    expect(parseRuntimeMinutes(null)).toBe(0);
   });
 });
