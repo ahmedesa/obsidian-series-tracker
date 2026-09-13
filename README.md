@@ -155,7 +155,11 @@ vault's plugin folder after each change (or symlink it) and reload Obsidian
 (Cmd+P → "Reload app without saving") to see changes.
 
 `npm test` runs the unit test suite (vitest). `npm run build` type-checks
-(`tsc -noEmit`) before bundling — both must pass before a commit.
+(`tsc -noEmit`) before bundling. `npm run lint` runs the same
+[eslint-plugin-obsidianmd](https://www.npmjs.com/package/eslint-plugin-obsidianmd)
+rules community.obsidian.md's plugin review checks, so issues surface
+locally before a push instead of on the review page. All three must pass
+before a commit.
 
 ## License
 

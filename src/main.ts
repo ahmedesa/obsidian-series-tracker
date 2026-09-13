@@ -37,10 +37,10 @@ export default class SeriesTrackerPlugin extends Plugin {
     this.registerView(VIEW_TYPE_DASHBOARD, (leaf) => new DashboardView(leaf, this));
     this.registerView(VIEW_TYPE_MOVIES, (leaf) => new MoviesView(leaf, this));
 
-    this.addRibbonIcon("tv", "Open Series Tracker", () => {
+    this.addRibbonIcon("tv", "Open series tracker", () => {
       void this.activateView();
     });
-    this.addRibbonIcon("clapperboard", "Open Movie Tracker", () => {
+    this.addRibbonIcon("clapperboard", "Open movie tracker", () => {
       void this.activateMoviesView();
     });
 
@@ -91,7 +91,7 @@ export default class SeriesTrackerPlugin extends Plugin {
 
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!file.path.startsWith(seriesFolder) && !file.path.startsWith(moviesFolder)) continue;
-      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
       if (!fm || (fm.type !== "series" && fm.type !== "movie")) continue;
       const id = extractImdbId(asString(fm.source_url));
       if (id) ids.add(id);
@@ -100,7 +100,8 @@ export default class SeriesTrackerPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = (await this.loadData()) as Partial<SeriesTrackerSettings> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded ?? {});
   }
 
   async saveSettings() {

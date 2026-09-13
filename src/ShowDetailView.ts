@@ -44,7 +44,7 @@ export async function renderShowDetail(
 
     const { body } = splitFrontmatter(content);
     const cache = app.metadataCache.getFileCache(file);
-    const fm = parseFrontmatter((cache?.frontmatter as Record<string, unknown> | undefined) ?? {});
+    const fm = parseFrontmatter((cache?.frontmatter) ?? {});
     const seasons = parseSeriesBody(body);
 
     container.createEl("h2", { text: fm.title });
@@ -176,7 +176,7 @@ export async function renderShowDetail(
     // Refresh — force-refetch TMDb data (bypassing the 24h cache) and merge
     // any newly-aired seasons/episodes into the note. Existing checkbox
     // state and watched dates are never touched.
-    const refreshBtn = container.createEl("button", { cls: "st-refresh-btn", text: "↻ Refresh from TMDb" });
+    const refreshBtn = container.createEl("button", { cls: "st-refresh-btn", text: "↻ refresh from TMDb" });
     const handleRefresh = async () => {
       // Re-derive from a fresh read rather than trusting the outer `fm`/
       // `imdbId` closures — those came from metadataCache.getFileCache() at
@@ -189,7 +189,7 @@ export async function renderShowDetail(
       const liveImdbId = extractImdbId(liveSourceUrlMatch?.[1] ?? "");
 
       if (!liveImdbId) {
-        new Notice("Series Tracker: this note has no IMDb link to refresh from.");
+        new Notice("Series tracker: this note has no IMDb link to refresh from.");
         return;
       }
       refreshBtn.disabled = true;
@@ -236,7 +236,7 @@ export async function renderShowDetail(
           const seasonNote = merged.seasonsAdded > 0 ? ` (${merged.seasonsAdded} new season${merged.seasonsAdded > 1 ? "s" : ""})` : "";
           new Notice(`Series Tracker: found ${merged.episodesAdded} new episode${merged.episodesAdded > 1 ? "s" : ""}${seasonNote}.`);
         } else {
-          new Notice("Series Tracker: no new episodes.");
+          new Notice("Series tracker: no new episodes.");
         }
         onChange();
         await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
@@ -245,7 +245,7 @@ export async function renderShowDetail(
         new Notice(`Series Tracker: refresh failed — ${errorMessage(err)}`);
       } finally {
         refreshBtn.disabled = false;
-        refreshBtn.textContent = "↻ Refresh from TMDb";
+        refreshBtn.textContent = "↻ refresh from TMDb";
       }
     };
     refreshBtn.addEventListener("click", () => void handleRefresh());

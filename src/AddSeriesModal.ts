@@ -70,7 +70,7 @@ export class AddSeriesModal extends Modal {
     input.focus();
 
     contentEl.createEl("p", {
-      text: "Can't find it by title (e.g. a non-English title)? Add it directly by IMDb ID or URL:",
+      text: "Can't find it by title, such as a non-English title? Add it directly by IMDb ID or URL:",
       cls: "st-modal-id-hint",
     });
     const idRow = contentEl.createDiv({ cls: "st-modal-search-row" });
@@ -83,7 +83,7 @@ export class AddSeriesModal extends Modal {
     const runIdAdd = async () => {
       const imdbId = parseImdbId(idInput.value);
       if (!imdbId) {
-        new Notice("Series Tracker: enter a valid IMDb id or URL (e.g. tt1234567).");
+        new Notice("Series tracker: enter a valid IMDb ID or URL, like tt1234567.");
         return;
       }
       idBtn.disabled = true;
@@ -138,12 +138,12 @@ export class AddSeriesModal extends Modal {
       }
       const info = row.createDiv({ cls: "st-modal-result-info" });
       const titleRow = info.createDiv({ cls: "st-modal-result-title-row" });
-      titleRow.createEl("span", { text: `${r.title} (${r.year})`, cls: "st-modal-result-title" });
+      titleRow.createSpan({ text: `${r.title} (${r.year})`, cls: "st-modal-result-title" });
       if (r.rating) {
-        titleRow.createEl("span", { text: `★ ${r.rating}`, cls: "st-modal-result-rating" });
+        titleRow.createSpan({ text: `★ ${r.rating}`, cls: "st-modal-result-rating" });
       }
       if (r.plot) {
-        info.createEl("div", { text: truncate(r.plot, 140), cls: "st-modal-result-plot" });
+        info.createDiv({ text: truncate(r.plot, 140), cls: "st-modal-result-plot" });
       }
       const addBtn = row.createEl("button", { text: "Add" });
       const handleAdd = async () => {

@@ -46,7 +46,7 @@ export class DashboardView extends ItemView {
   }
 
   getDisplayText() {
-    return "Series Tracker";
+    return "Series tracker";
   }
 
   getIcon() {
@@ -93,7 +93,7 @@ export class DashboardView extends ItemView {
     const results: { file: TFile; parsed: ParsedSeries }[] = [];
     for (const file of files) {
       const cache = this.app.metadataCache.getFileCache(file);
-      const fm = cache?.frontmatter as Record<string, unknown> | undefined;
+      const fm = cache?.frontmatter;
       if (!fm || fm.type !== "series") continue;
       const content = await this.app.vault.read(file);
       const { body } = splitFrontmatter(content);
@@ -208,7 +208,8 @@ export class DashboardView extends ItemView {
       void this.render();
     });
 
-    const addBtn = header.createEl("button", { cls: "st-add-series", text: "+ Add series" });
+    const addBtn = header.createEl("button", { cls: "st-add-series", text: "+ add series" });
+
     addBtn.addEventListener("click", () => {
       new AddSeriesModal(this.app, this.plugin, () => void this.render()).open();
     });
@@ -302,7 +303,7 @@ export class DashboardView extends ItemView {
     }
 
     if (all.length === 0) {
-      grid.createEl("p", { cls: "st-empty-state", text: "No series tracked yet — click + Add series to get started." });
+      grid.createEl("p", { cls: "st-empty-state", text: "No series tracked yet — click + add series to get started." });
     } else if (filtered.length === 0) {
       grid.createEl("p", { cls: "st-empty-state", text: "No shows match the current filter." });
     }
@@ -458,7 +459,7 @@ export class DashboardView extends ItemView {
       if (r.poster) card.createEl("img", { cls: "st-recommend-poster", attr: { src: r.poster } });
       card.createDiv({ cls: "st-recommend-title", text: `${r.title} (${r.year})` });
       if (r.rating) card.createDiv({ cls: "st-recommend-rating", text: `★ ${r.rating}` });
-      const addBtn = card.createEl("button", { cls: "st-recommend-add", text: "+ Add" });
+      const addBtn = card.createEl("button", { cls: "st-recommend-add", text: "+ add" });
       addBtn.addEventListener("click", () => {
         new AddSeriesModal(this.app, this.plugin, () => void this.render(), r).open();
       });
@@ -577,7 +578,7 @@ export class DashboardView extends ItemView {
     container.empty();
     container.addClass("series-tracker-view");
 
-    const back = container.createEl("button", { text: "← Back to dashboard" });
+    const back = container.createEl("button", { text: "← back to dashboard" });
     back.onClickEvent(() => {
       this.currentFile = null;
       void this.render();

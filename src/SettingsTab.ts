@@ -66,7 +66,7 @@ export class SeriesTrackerSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Streaming country")
-      .setDesc("Country code for streaming availability (e.g. US, GB, DE).")
+      .setDesc("Country code for streaming availability, such as US, GB, or DE.")
       .addText((text) =>
         text
           .setValue(this.plugin.settings.streamingCountry)

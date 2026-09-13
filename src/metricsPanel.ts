@@ -29,7 +29,7 @@ async function loadTrackedItems(app: App, plugin: SeriesTrackerPlugin): Promise<
   const items: TrackedItem[] = [];
 
   for (const file of app.vault.getMarkdownFiles()) {
-    const fm = app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+    const fm = app.metadataCache.getFileCache(file)?.frontmatter;
     if (!fm) continue;
 
     if (fm.type === "series" && file.path.startsWith(seriesFolder)) {

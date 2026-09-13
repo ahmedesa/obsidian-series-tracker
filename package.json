@@ -1,16 +1,19 @@
 {
   "name": "series-tracker",
-  "version": "0.6.0",
+  "version": "0.6.2",
   "description": "Dashboard and episode tracker for TV series notes in Obsidian.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint src"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "esbuild": "^0.20.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.2",
     "obsidian": "^1.5.7",
     "tslib": "^2.6.0",
     "typescript": "^5.4.0",
