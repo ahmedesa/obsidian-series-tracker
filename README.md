@@ -1,15 +1,29 @@
 # Series Tracker
 
+[![CI](https://github.com/ahmedesa/obsidian-series-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedesa/obsidian-series-tracker/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/ahmedesa/obsidian-series-tracker)](https://github.com/ahmedesa/obsidian-series-tracker/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 An Obsidian plugin: a TrackSeries-style dashboard for TV series (episode
 checklists, air-date awareness, automatic status) and movies (watchlist
 grid, ratings, favourites) — reading and writing plain Markdown notes,
 never owning your data.
 
+## Screenshots
+
+**Series dashboard** — filters, stats, "Next Up" spotlight, poster grid, recently watched feed
+
+![Series dashboard](screenshots/series-dashboard.png)
+
+**Movies dashboard** — filters, stats, favourites, streaming-provider badges on posters
+
+![Movies dashboard](screenshots/movies-dashboard.png)
+
 ## Features
 
 **Series**
-- Dashboard: poster grid, text + status filters, stats (episodes watched,
-  shows in progress, time spent watching)
+- Dashboard: poster grid, text + status + genre filters, stats (episodes
+  watched, shows in progress, shows tracked, time spent watching)
 - "Next Up" spotlight (oldest aired-but-unwatched episode across all
   tracked shows) and an "Upcoming" list grouped by air date
 - "Recently watched" feed
@@ -19,13 +33,30 @@ never owning your data.
 - Automatic status (Wishlist / Pending / Up to date / Completed), derived
   from watch state and air dates — "Abandoned" is the one status you set
   yourself and the plugin never overwrites
-- Personal 0–5 rating and a freeform Notes section per show
+- Personal 0–5 rating (half-star increments), a "Mood" tag, an editable
+  completion date, and a freeform Notes section per show
+- Delete a show from the detail view (moves the note to Obsidian's trash,
+  never a hard delete)
 
 **Movies**
-- Dashboard: poster grid, text + status filters, stats
+- Dashboard: poster grid, text + status + genre filters, stats (movies
+  watched, favourites, movies tracked, time spent watching)
 - Add via TMDb search (poster, genre, plot, etc. filled in automatically)
-- Personal 0–5 rating, favourite toggle, status (Want to Watch / Watching /
-  Watched — stamps a completion date), Notes section
+- Personal 0–5 rating (half-star increments), favourite toggle, status
+  (Want to Watch / Watching / Watched), a "Mood" tag, an editable
+  completion date, Notes section
+- Delete a movie from the detail view (same trash-not-hard-delete behavior)
+
+**Both sections**
+- Streaming-provider badges on poster cards (which service it's on,
+  configurable by country)
+- A "Recommended for you" strip on both dashboards, built from your own
+  top-rated genres — hidden entirely until you've rated something
+- A collapsible "Metrics" panel on both dashboards: top genres, total
+  viewing time, and a taste-index comparing your ratings to TMDb's public
+  average — computed on demand, not on every render
+- Can't find a title by name (e.g. searching in a non-English language)?
+  Add it directly by IMDb ID or URL instead — bypasses search entirely
 
 Both sections search and fetch metadata from the free
 [TMDb API](https://www.themoviedb.org/settings/api) — you'll need your own
@@ -35,8 +66,6 @@ results — OMDb only matches a title's single primary (usually English)
 listing. Notes still store an IMDb URL in `source_url` for portability; the
 plugin resolves that to TMDb's internal id automatically whenever it needs
 to fetch data (via TMDb's `find` endpoint, cached permanently once resolved).
-Can't find something by title? Use the "Add by IMDb ID/URL" field instead —
-it works regardless of search-index coverage.
 
 ## Install (local, not yet on the community plugin store)
 
