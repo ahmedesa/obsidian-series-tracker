@@ -17,6 +17,7 @@ export interface SeriesFrontmatter {
   rating: number | null;
   image: string;
   source_url: string;
+  date_added: string;
 }
 
 /**
@@ -222,6 +223,7 @@ export function parseFrontmatter(fm: Record<string, any>): SeriesFrontmatter {
     rating: typeof fm.rating === "number" ? fm.rating : null,
     image: fm.image ?? "",
     source_url: fm.source_url ?? "",
+    date_added: typeof fm.date_added === "string" ? fm.date_added : "",
   };
 }
 

@@ -44,6 +44,10 @@ export async function renderShowDetail(
 
     container.createEl("h2", { text: fm.title });
 
+    if (fm.date_added) {
+      container.createDiv({ cls: "st-date-added", text: `Added: ${fm.date_added}` });
+    }
+
     // Status — same 5 options as the dashboard's status filter. Wishlist/
     // Pending/Up to date/Completed are auto-managed (see autoUpdateStatus
     // below, called after every watch-state write); this dropdown is for
@@ -115,7 +119,17 @@ export async function renderShowDetail(
     // state and watched dates are never touched.
     const refreshBtn = container.createEl("button", { cls: "st-refresh-btn", text: "↻ Refresh from OMDb" });
     refreshBtn.addEventListener("click", async () => {
-      if (!imdbId) {
+      // Re-derive from a fresh read rather than trusting the outer `fm`/
+      // `imdbId` closures — those came from metadataCache.getFileCache() at
+      // render time, which can lag behind the file's real current content
+      // (e.g. right after a very recent create/write), producing a false
+      // "no IMDb link" even when the note's actual frontmatter is correct.
+      const liveContent = await app.vault.read(file);
+      const { frontmatterBlock: liveFmBlock } = splitFrontmatter(liveContent);
+      const liveSourceUrlMatch = liveFmBlock.match(/^source_url:\s*"?([^"\n]*)"?\s*$/m);
+      const liveImdbId = extractImdbId(liveSourceUrlMatch?.[1] ?? "");
+
+      if (!liveImdbId) {
         new Notice("Series Tracker: this note has no IMDb link to refresh from.");
         return;
       }
@@ -131,12 +145,12 @@ export async function renderShowDetail(
           },
           obsidianOmdbFetcher,
         );
-        const freshInfo = await freshOmdb.getSeries(imdbId, true);
+        const freshInfo = await freshOmdb.getSeries(liveImdbId, true);
         const seasonCount = Math.min(freshInfo?.totalSeasons || seasons.length || 1, 25);
 
         const fetched = await Promise.all(
           Array.from({ length: seasonCount }, (_, i) => i + 1).map(async (n) => {
-            const data = await freshOmdb.getSeason(imdbId, n, true);
+            const data = await freshOmdb.getSeason(liveImdbId, n, true);
             return data ? { number: n, data } : null;
           }),
         );
