@@ -1,0 +1,58 @@
+.series-tracker-view {
+  padding: 16px;
+}
+.st-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.st-tile {
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  flex: 1;
+}
+.st-tile-value {
+  font-size: 1.5em;
+  font-weight: 700;
+}
+.st-tile-label {
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+.st-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+.st-card {
+  cursor: pointer;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.st-card img {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  display: block;
+}
+.st-card-title {
+  font-weight: 600;
+  padding: 6px 8px 0;
+}
+.st-card-progress {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  padding: 0 8px 8px;
+}
+.st-episode-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+.st-badge-pending {
+  color: var(--text-warning);
+  font-size: 0.8em;
+}

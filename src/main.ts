@@ -1,5 +1,6 @@
 import { Plugin, WorkspaceLeaf } from "obsidian";
 import { SeriesTrackerSettingTab } from "./SettingsTab";
+import { DashboardView, VIEW_TYPE_DASHBOARD } from "./DashboardView";
 
 export interface SeriesTrackerSettings {
   omdbApiKey: string;
@@ -13,13 +14,13 @@ export const DEFAULT_SETTINGS: SeriesTrackerSettings = {
   omdbCache: {},
 };
 
-export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
-
 export default class SeriesTrackerPlugin extends Plugin {
   settings: SeriesTrackerSettings;
 
   async onload() {
     await this.loadSettings();
+
+    this.registerView(VIEW_TYPE_DASHBOARD, (leaf) => new DashboardView(leaf, this));
 
     this.addRibbonIcon("tv", "Open Series Tracker", () => {
       this.activateView();
