@@ -171,6 +171,27 @@ export async function renderShowDetail(
     };
     moodSelect.addEventListener("change", () => void handleMoodChange());
 
+    // Favourite toggle.
+    const favRow = container.createDiv({ cls: "st-rating-row" });
+    const favCheckbox = favRow.createEl("input", { type: "checkbox" });
+    favCheckbox.checked = fm.favourite;
+    favRow.createSpan({ text: " Favourite" });
+    const handleFavouriteChange = async () => {
+      const next = favCheckbox.checked;
+      try {
+        await app.vault.process(file, (data) => {
+          const live = splitFrontmatter(data);
+          return setFrontmatterStringField(live.frontmatterBlock, "favourite", String(next)) + live.body;
+        });
+        fm.favourite = next;
+      } catch (err) {
+        favCheckbox.checked = !next;
+        console.error("Series Tracker: failed to write favourite", err);
+        new Notice(`Series Tracker: failed to save favourite — ${errorMessage(err)}`);
+      }
+    };
+    favCheckbox.addEventListener("change", () => void handleFavouriteChange());
+
     const imdbId = extractImdbId(fm.source_url);
 
     // Refresh — force-refetch TMDb data (bypassing the 24h cache) and merge

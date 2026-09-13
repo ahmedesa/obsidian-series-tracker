@@ -35,8 +35,8 @@ never owning your data.
 - Automatic status (Wishlist / Pending / Up to date / Completed), derived
   from watch state and air dates — "Abandoned" is the one status you set
   yourself and the plugin never overwrites
-- Personal 0–5 rating (half-star increments), a "Mood" tag, an editable
-  completion date, and a freeform Notes section per show
+- Personal 0–5 rating (half-star increments), favourite toggle, a "Mood"
+  tag, an editable completion date, and a freeform Notes section per show
 - Delete a show from the detail view (moves the note to Obsidian's trash,
   never a hard delete)
 
@@ -99,6 +99,7 @@ type: series
 title: Example Show
 status: watching
 rating: 4
+favourite: false
 total_seasons: 2
 source: manual
 source_url: https://www.imdb.com/title/tt0000000/
@@ -128,6 +129,7 @@ image: https://example.com/poster.jpg
   a TMDb id (cached) and used to fetch season/episode air dates and series
   metadata from TMDb.
 - `image` — poster URL, must be an **absolute URL**.
+- `favourite` — `true`/`false`, toggleable in the detail view.
 - `date_completed` — auto-stamped when status reaches `finished`, cleared if
   it moves away; editable in the detail view ("Completed on") to correct or
   backdate it.

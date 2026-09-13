@@ -238,6 +238,7 @@ export class DashboardView extends ItemView {
       watchedEp += watched;
       if (watched > 0 && watched < episodes.length) inProgress++;
     }
+    const favouriteCount = filtered.filter(({ parsed }) => parsed.frontmatter.favourite).length;
 
     const stats = container.createDiv({ cls: "st-stats" });
     const tile1 = stats.createDiv({ cls: "st-tile" });
@@ -255,12 +256,16 @@ export class DashboardView extends ItemView {
       text: this.filterStatus || this.filterGenre || this.filterText ? "Shows matching" : "Shows tracked",
     });
 
+    const tile4 = stats.createDiv({ cls: "st-tile" });
+    tile4.createDiv({ cls: "st-tile-value", text: `${favouriteCount}` });
+    tile4.createDiv({ cls: "st-tile-label", text: "Favourites" });
+
     // Placeholder now; populated once loadTimeSpent (below) resolves — it
     // needs a per-show TMDb runtime lookup, so it can't be computed here
     // synchronously without blocking the rest of the dashboard.
-    const tile4 = stats.createDiv({ cls: "st-tile" });
-    const tile4Value = tile4.createDiv({ cls: "st-tile-value", text: "—" });
-    tile4.createDiv({ cls: "st-tile-label", text: "Time spent watching" });
+    const tile5 = stats.createDiv({ cls: "st-tile" });
+    const tile5Value = tile5.createDiv({ cls: "st-tile-value", text: "—" });
+    tile5.createDiv({ cls: "st-tile-label", text: "Time spent watching" });
 
     const providersTmdb = this.newProvider();
 
@@ -274,7 +279,10 @@ export class DashboardView extends ItemView {
       if (parsed.frontmatter.image) {
         card.createEl("img", { attr: { src: parsed.frontmatter.image } });
       }
-      card.createDiv({ cls: "st-card-title", text: parsed.frontmatter.title });
+      card.createDiv({
+        cls: "st-card-title",
+        text: parsed.frontmatter.title + (parsed.frontmatter.favourite ? " ★" : ""),
+      });
       card.createDiv({ cls: "st-card-status", text: statusLabel(parsed.frontmatter.status) });
       card.createDiv({ cls: "st-card-progress", text: `${watched}/${episodes.length} (${pct}%)` });
       card.onClickEvent(() => {
@@ -357,7 +365,7 @@ export class DashboardView extends ItemView {
     this.loadTimeSpentMinutes(all)
       .then((minutes) => {
         if (generation !== this.renderGeneration) return;
-        tile4Value.setText(formatDurationMinutes(minutes));
+        tile5Value.setText(formatDurationMinutes(minutes));
       })
       .catch((err) => {
         console.error("Series Tracker: failed to compute time spent watching", err);

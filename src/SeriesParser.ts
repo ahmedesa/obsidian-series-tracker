@@ -15,6 +15,7 @@ export interface SeriesFrontmatter {
   title: string;
   status: string;
   rating: number | null;
+  favourite: boolean;
   image: string;
   source_url: string;
   date_added: string;
@@ -233,6 +234,7 @@ export function parseFrontmatter(fm: Record<string, unknown>): SeriesFrontmatter
     title: asString(fm.title),
     status: asString(fm.status, "want-to-watch"),
     rating: typeof fm.rating === "number" ? fm.rating : null,
+    favourite: fm.favourite === true,
     image: asString(fm.image),
     source_url: asString(fm.source_url),
     date_added: asString(fm.date_added),

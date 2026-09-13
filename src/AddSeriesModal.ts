@@ -219,6 +219,7 @@ export class AddSeriesModal extends Modal {
 type: series
 title: "${escapeYamlString(result.title)}"
 status: want-to-watch
+favourite: false
 rating: null
 total_seasons: ${totalSeasons || "null"}
 source: manual

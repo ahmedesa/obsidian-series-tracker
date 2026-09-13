@@ -56,11 +56,22 @@ describe("parseFrontmatter", () => {
       title: "The Gentlemen",
       status: "want-to-watch",
       rating: null,
+      favourite: false,
       image: "",
       source_url: "",
       date_completed: "",
       mood: "",
     });
+  });
+
+  it("reads favourite: true", () => {
+    const fm = parseFrontmatter({ title: "The Gentlemen", favourite: true });
+    expect(fm.favourite).toBe(true);
+  });
+
+  it("treats a non-boolean favourite value as false", () => {
+    const fm = parseFrontmatter({ title: "The Gentlemen", favourite: "true" });
+    expect(fm.favourite).toBe(false);
   });
 });
 
