@@ -45,8 +45,17 @@ it works regardless of search-index coverage.
    `<vault>/.obsidian/plugins/series-tracker/`
 3. Add `"series-tracker"` to `<vault>/.obsidian/community-plugins.json`
 4. Restart Obsidian, enable it in Settings → Community plugins if needed.
-5. Set your TMDb API key, series folder, and movies folder in
-   Settings → Series Tracker.
+5. Get a free TMDb API key and set it in Settings → Series Tracker:
+   1. Go to [themoviedb.org](https://www.themoviedb.org/) and create a
+      free account (or sign in).
+   2. Go to [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api)
+      and request an API key (choose "Developer" — it's free, approval is
+      instant).
+   3. Copy the **API Key (v3 auth)** value.
+   4. In Obsidian: Settings → Series Tracker → paste it into the
+      **TMDb API key** field.
+6. Set your series folder and movies folder in Settings → Series Tracker
+   (defaults: `Media/Series`, `Media/Movies`).
 
 ## Note format
 
