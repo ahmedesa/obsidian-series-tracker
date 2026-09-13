@@ -28,43 +28,7 @@ export async function renderShowDetail(
 
     container.createEl("h2", { text: fm.title });
 
-    // Render immediately from local data; OMDb air-date badges are patched
-    // in once (parallel) fetches resolve, below.
-    const rowsByKey: Record<string, HTMLElement> = {};
-
-    for (const season of seasons) {
-      container.createEl("h3", { text: `Season ${season.number}` });
-      const list = container.createDiv({ cls: "st-episode-list" });
-
-      for (const ep of season.episodes) {
-        const row = list.createDiv({ cls: "st-episode-row" });
-        const checkbox = row.createEl("input", { type: "checkbox" });
-        checkbox.checked = ep.watched;
-        row.createSpan({ text: ` E${ep.number} — ${ep.title}` });
-        rowsByKey[`${season.number}:${ep.number}`] = row;
-
-        checkbox.addEventListener("change", async () => {
-          const desired = checkbox.checked;
-          try {
-            await app.vault.process(file, (data) => {
-              const live = splitFrontmatter(data);
-              const liveLines = live.body.split("\n");
-              const newLines = toggleEpisodeLine(liveLines, ep.lineIndex, desired);
-              return live.frontmatterBlock + newLines.join("\n");
-            });
-            onChange();
-          } catch (err) {
-            checkbox.checked = !desired;
-            console.error("Series Tracker: failed to write episode state", err);
-            new Notice(`Series Tracker: failed to update episode — ${errorMessage(err)}`);
-          }
-        });
-      }
-    }
-
     const imdbId = extractImdbId(fm.source_url);
-    if (!imdbId || seasons.length === 0) return;
-
     const omdb = new OmdbClient(
       plugin.settings.omdbApiKey,
       plugin.settings.omdbCache,
@@ -74,6 +38,82 @@ export async function renderShowDetail(
       },
       obsidianOmdbFetcher,
     );
+
+    // Series-level info panel (plot/rated/runtime/country/awards/rating) —
+    // fetched and rendered before the episode lists, but never blocks them.
+    if (imdbId) {
+      const info = await omdb.getSeries(imdbId);
+      if (!isCurrent()) return;
+      if (info) {
+        const panel = container.createDiv({ cls: "st-info-panel" });
+        if (info.plot) panel.createEl("p", { cls: "st-info-plot", text: info.plot });
+        const meta = panel.createDiv({ cls: "st-info-meta" });
+        const fields: [string, string][] = [
+          ["Rated", info.rated],
+          ["Runtime", info.runtime],
+          ["Country", info.country],
+          ["IMDb rating", info.imdbRating],
+          ["Awards", info.awards],
+        ];
+        for (const [label, value] of fields) {
+          if (!value || value === "N/A") continue;
+          const row = meta.createDiv({ cls: "st-info-row" });
+          row.createEl("strong", { text: `${label}: ` });
+          row.createSpan({ text: value });
+        }
+      }
+    }
+
+    // Render immediately from local data; OMDb air-date badges are patched
+    // in once (parallel) fetches resolve, below.
+    const rowsByKey: Record<string, HTMLElement> = {};
+
+    for (const season of seasons) {
+      const seasonHeader = container.createDiv({ cls: "st-season-header" });
+      seasonHeader.createEl("h3", { text: `Season ${season.number}` });
+      const markWatchedBtn = seasonHeader.createEl("button", {
+        cls: "st-mark-watched",
+        text: "Mark season as watched",
+      });
+      const list = container.createDiv({ cls: "st-episode-list" });
+      const checkboxes: HTMLInputElement[] = [];
+
+      for (const ep of season.episodes) {
+        const row = list.createDiv({ cls: "st-episode-row" });
+        const checkbox = row.createEl("input", { type: "checkbox" });
+        checkbox.checked = ep.watched;
+        row.createSpan({ text: ` E${ep.number} — ${ep.title}` });
+        rowsByKey[`${season.number}:${ep.number}`] = row;
+        checkboxes.push(checkbox);
+
+        checkbox.addEventListener("change", async () => {
+          await writeEpisodeState(app, file, ep.lineIndex, checkbox.checked, checkbox, onChange);
+        });
+      }
+
+      markWatchedBtn.addEventListener("click", async () => {
+        markWatchedBtn.disabled = true;
+        try {
+          await app.vault.process(file, (data) => {
+            const live = splitFrontmatter(data);
+            let lines = live.body.split("\n");
+            for (const ep of season.episodes) {
+              lines = toggleEpisodeLine(lines, ep.lineIndex, true);
+            }
+            return live.frontmatterBlock + lines.join("\n");
+          });
+          for (const cb of checkboxes) cb.checked = true;
+          onChange();
+        } catch (err) {
+          console.error("Series Tracker: failed to mark season watched", err);
+          new Notice(`Series Tracker: failed to mark season watched — ${errorMessage(err)}`);
+        } finally {
+          markWatchedBtn.disabled = false;
+        }
+      });
+    }
+
+    if (!imdbId || seasons.length === 0) return;
 
     const seasonResults = await Promise.all(
       seasons.map(async (season) => {
@@ -104,6 +144,29 @@ export async function renderShowDetail(
     if (isCurrent()) {
       new Notice(`Series Tracker: failed to load show — ${errorMessage(err)}`);
     }
+  }
+}
+
+async function writeEpisodeState(
+  app: App,
+  file: TFile,
+  lineIndex: number,
+  desired: boolean,
+  checkbox: HTMLInputElement,
+  onChange: () => void,
+): Promise<void> {
+  try {
+    await app.vault.process(file, (data) => {
+      const live = splitFrontmatter(data);
+      const liveLines = live.body.split("\n");
+      const newLines = toggleEpisodeLine(liveLines, lineIndex, desired);
+      return live.frontmatterBlock + newLines.join("\n");
+    });
+    onChange();
+  } catch (err) {
+    checkbox.checked = !desired;
+    console.error("Series Tracker: failed to write episode state", err);
+    new Notice(`Series Tracker: failed to update episode — ${errorMessage(err)}`);
   }
 }
 

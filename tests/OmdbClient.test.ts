@@ -47,4 +47,34 @@ describe("OmdbClient", () => {
     expect(result).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it("fetches and caches series-level info", async () => {
+    const mockResponse = {
+      Response: "True",
+      Plot: "A synopsis.",
+      Rated: "TV-MA",
+      Runtime: "45 min",
+      Country: "United Kingdom, United States",
+      Awards: "Won 1 Primetime Emmy.",
+      imdbRating: "8.0",
+    };
+    global.fetch = vi.fn().mockResolvedValue({ json: async () => mockResponse }) as any;
+
+    const cache: Record<string, any> = {};
+    const saveCache = vi.fn(async (c: any) => { Object.assign(cache, c); });
+    const client = new OmdbClient("fake-key", cache, saveCache);
+
+    const result = await client.getSeries("tt13210838");
+
+    expect(result).toEqual({
+      plot: "A synopsis.",
+      rated: "TV-MA",
+      runtime: "45 min",
+      country: "United Kingdom, United States",
+      awards: "Won 1 Primetime Emmy.",
+      imdbRating: "8.0",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect((fetch as any).mock.calls[0][0]).not.toContain("Season=");
+  });
 });

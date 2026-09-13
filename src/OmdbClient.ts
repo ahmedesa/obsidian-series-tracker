@@ -10,10 +10,26 @@ export interface OmdbSeasonResponse {
   episodes: OmdbEpisode[];
 }
 
-interface CacheEntry {
+export interface OmdbSeriesInfo {
+  plot: string;
+  rated: string;
+  runtime: string;
+  country: string;
+  awards: string;
+  imdbRating: string;
+}
+
+interface SeasonCacheEntry {
   fetchedAt: number;
   data: OmdbSeasonResponse;
 }
+
+interface SeriesCacheEntry {
+  fetchedAt: number;
+  data: OmdbSeriesInfo;
+}
+
+type CacheEntry = SeasonCacheEntry | SeriesCacheEntry;
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -47,14 +63,14 @@ export class OmdbClient {
     const key = this.cacheKey(imdbId, season);
     const cached = this.cache[key];
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-      return cached.data;
+      return cached.data as OmdbSeasonResponse;
     }
-    if (!this.apiKey) return cached?.data ?? null;
+    if (!this.apiKey) return (cached?.data as OmdbSeasonResponse) ?? null;
 
     try {
       const url = `https://www.omdbapi.com/?apikey=${this.apiKey}&i=${imdbId}&Season=${season}`;
       const { json } = await this.fetcher(url);
-      if (json.Response !== "True") return cached?.data ?? null;
+      if (json.Response !== "True") return (cached?.data as OmdbSeasonResponse) ?? null;
 
       const data: OmdbSeasonResponse = {
         season,
@@ -69,7 +85,36 @@ export class OmdbClient {
       await this.saveCache(this.cache);
       return data;
     } catch {
-      return cached?.data ?? null;
+      return (cached?.data as OmdbSeasonResponse) ?? null;
+    }
+  }
+
+  async getSeries(imdbId: string): Promise<OmdbSeriesInfo | null> {
+    const key = `${imdbId}:series`;
+    const cached = this.cache[key];
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+      return cached.data as OmdbSeriesInfo;
+    }
+    if (!this.apiKey) return (cached?.data as OmdbSeriesInfo) ?? null;
+
+    try {
+      const url = `https://www.omdbapi.com/?apikey=${this.apiKey}&i=${imdbId}`;
+      const { json } = await this.fetcher(url);
+      if (json.Response !== "True") return (cached?.data as OmdbSeriesInfo) ?? null;
+
+      const data: OmdbSeriesInfo = {
+        plot: json.Plot ?? "",
+        rated: json.Rated ?? "",
+        runtime: json.Runtime ?? "",
+        country: json.Country ?? "",
+        awards: json.Awards ?? "",
+        imdbRating: json.imdbRating ?? "",
+      };
+      this.cache[key] = { fetchedAt: Date.now(), data };
+      await this.saveCache(this.cache);
+      return data;
+    } catch {
+      return (cached?.data as OmdbSeriesInfo) ?? null;
     }
   }
 }
