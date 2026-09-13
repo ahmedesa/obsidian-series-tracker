@@ -66,26 +66,66 @@ type CacheEntry = SeasonCacheEntry | SeriesCacheEntry;
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+/** Raw shape of an individual episode entry in OMDb's season response. */
+interface OmdbRawEpisode {
+  Title?: string;
+  Episode?: string;
+  Released?: string;
+  imdbRating?: string;
+}
+
+/** Raw shape of `https://www.omdbapi.com/?i=<id>&Season=<n>`. */
+interface OmdbRawSeasonResponse {
+  Response: string;
+  Episodes?: OmdbRawEpisode[];
+}
+
+/** Raw shape of `https://www.omdbapi.com/?i=<id>`. */
+interface OmdbRawSeriesResponse {
+  Response: string;
+  Title?: string;
+  Year?: string;
+  Plot?: string;
+  Rated?: string;
+  Runtime?: string;
+  Country?: string;
+  Awards?: string;
+  imdbRating?: string;
+  Genre?: string;
+  Poster?: string;
+  totalSeasons?: string;
+  Type?: string;
+}
+
+/** Raw shape of an individual result in OMDb's `s=` search response. */
+interface OmdbRawSearchEntry {
+  Title?: string;
+  Year?: string;
+  imdbID?: string;
+  Poster?: string;
+}
+
+/** Raw shape of `https://www.omdbapi.com/?s=<title>&type=<type>`. */
+interface OmdbRawSearchResponse {
+  Response: string;
+  Search?: OmdbRawSearchEntry[];
+}
+
 /**
  * Minimal fetch abstraction so OmdbClient stays a pure, testable module
- * with no dependency on the `obsidian` package. Production callers should
+ * with no dependency on the `obsidian` package. Production callers must
  * inject a fetcher backed by Obsidian's `requestUrl` (CORS-safe on both
- * desktop and mobile); tests can inject a fake. Defaults to global `fetch`
- * for backwards-compatible testability.
+ * desktop and mobile — raw `fetch` fails under Obsidian's mobile CORS
+ * restrictions); tests inject a fake backed by `global.fetch`.
  */
-export type OmdbFetcher = (url: string) => Promise<{ json: any }>;
-
-async function defaultFetcher(url: string): Promise<{ json: any }> {
-  const res = await fetch(url);
-  return { json: await res.json() };
-}
+export type OmdbFetcher = (url: string) => Promise<{ json: unknown }>;
 
 export class OmdbClient {
   constructor(
     private apiKey: string,
     private cache: Record<string, CacheEntry>,
     private saveCache: (cache: Record<string, CacheEntry>) => Promise<void>,
-    private fetcher: OmdbFetcher = defaultFetcher,
+    private fetcher: OmdbFetcher,
   ) {}
 
   private cacheKey(imdbId: string, season: number): string {
@@ -103,15 +143,16 @@ export class OmdbClient {
     try {
       const url = `https://www.omdbapi.com/?apikey=${this.apiKey}&i=${imdbId}&Season=${season}`;
       const { json } = await this.fetcher(url);
-      if (json.Response !== "True") return (cached?.data as OmdbSeasonResponse) ?? null;
+      const raw = json as OmdbRawSeasonResponse;
+      if (raw.Response !== "True") return (cached?.data as OmdbSeasonResponse) ?? null;
 
       const data: OmdbSeasonResponse = {
         season,
-        episodes: (json.Episodes ?? []).map((e: any) => ({
-          title: e.Title,
-          episode: parseInt(e.Episode, 10),
-          released: e.Released,
-          imdbRating: e.imdbRating,
+        episodes: (raw.Episodes ?? []).map((e) => ({
+          title: e.Title ?? "",
+          episode: parseInt(e.Episode ?? "0", 10),
+          released: e.Released ?? "",
+          imdbRating: e.imdbRating ?? "",
         })),
       };
       this.cache[key] = { fetchedAt: Date.now(), data };
@@ -133,22 +174,23 @@ export class OmdbClient {
     try {
       const url = `https://www.omdbapi.com/?apikey=${this.apiKey}&i=${imdbId}`;
       const { json } = await this.fetcher(url);
-      if (json.Response !== "True") return (cached?.data as OmdbSeriesInfo) ?? null;
+      const raw = json as OmdbRawSeriesResponse;
+      if (raw.Response !== "True") return (cached?.data as OmdbSeriesInfo) ?? null;
 
       const data: OmdbSeriesInfo = {
-        title: json.Title ?? "",
-        year: json.Year ?? "",
-        plot: json.Plot ?? "",
-        rated: json.Rated ?? "",
-        runtime: json.Runtime ?? "",
-        country: json.Country ?? "",
-        awards: json.Awards ?? "",
-        imdbRating: json.imdbRating ?? "",
-        genre: json.Genre ?? "",
-        poster: json.Poster && json.Poster !== "N/A" ? json.Poster : "",
-        totalSeasons: parseInt(json.totalSeasons, 10) || 0,
-        seriesEnded: isSeriesEnded(json.Year),
-        type: json.Type ?? "",
+        title: raw.Title ?? "",
+        year: raw.Year ?? "",
+        plot: raw.Plot ?? "",
+        rated: raw.Rated ?? "",
+        runtime: raw.Runtime ?? "",
+        country: raw.Country ?? "",
+        awards: raw.Awards ?? "",
+        imdbRating: raw.imdbRating ?? "",
+        genre: raw.Genre ?? "",
+        poster: raw.Poster && raw.Poster !== "N/A" ? raw.Poster : "",
+        totalSeasons: parseInt(raw.totalSeasons ?? "0", 10) || 0,
+        seriesEnded: isSeriesEnded(raw.Year),
+        type: raw.Type ?? "",
       };
       this.cache[key] = { fetchedAt: Date.now(), data };
       await this.saveCache(this.cache);
@@ -164,11 +206,12 @@ export class OmdbClient {
     try {
       const url = `https://www.omdbapi.com/?apikey=${this.apiKey}&s=${encodeURIComponent(title)}&type=${type}`;
       const { json } = await this.fetcher(url);
-      if (json.Response !== "True") return [];
-      return (json.Search ?? []).map((r: any) => ({
-        title: r.Title,
-        year: r.Year,
-        imdbId: r.imdbID,
+      const raw = json as OmdbRawSearchResponse;
+      if (raw.Response !== "True") return [];
+      return (raw.Search ?? []).map((r) => ({
+        title: r.Title ?? "",
+        year: r.Year ?? "",
+        imdbId: r.imdbID ?? "",
         poster: r.Poster && r.Poster !== "N/A" ? r.Poster : "",
       }));
     } catch {

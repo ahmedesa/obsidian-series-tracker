@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { OmdbClient, isSeriesEnded, parseRuntimeMinutes } from "../src/OmdbClient";
+import { OmdbClient, OmdbFetcher, isSeriesEnded, parseRuntimeMinutes } from "../src/OmdbClient";
+
+const testFetcher: OmdbFetcher = async (url: string) => {
+  const res = await fetch(url);
+  return { json: await res.json() };
+};
 
 describe("OmdbClient", () => {
   beforeEach(() => {
@@ -17,7 +22,7 @@ describe("OmdbClient", () => {
 
     const cache: Record<string, any> = {};
     const saveCache = vi.fn(async (c: any) => { Object.assign(cache, c); });
-    const client = new OmdbClient("fake-key", cache, saveCache);
+    const client = new OmdbClient("fake-key", cache, saveCache, testFetcher);
 
     const result = await client.getSeason("tt13210838", 1);
 
@@ -32,7 +37,7 @@ describe("OmdbClient", () => {
     const cache = {
       "tt123:1": { fetchedAt: Date.now(), data: { season: 1, episodes: [] } },
     };
-    const client = new OmdbClient("fake-key", cache, vi.fn());
+    const client = new OmdbClient("fake-key", cache, vi.fn(), testFetcher);
 
     const result = await client.getSeason("tt123", 1);
 
@@ -42,7 +47,7 @@ describe("OmdbClient", () => {
 
   it("returns null with no key and no cache", async () => {
     global.fetch = vi.fn() as any;
-    const client = new OmdbClient("", {}, vi.fn());
+    const client = new OmdbClient("", {}, vi.fn(), testFetcher);
     const result = await client.getSeason("tt123", 1);
     expect(result).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
@@ -68,7 +73,7 @@ describe("OmdbClient", () => {
 
     const cache: Record<string, any> = {};
     const saveCache = vi.fn(async (c: any) => { Object.assign(cache, c); });
-    const client = new OmdbClient("fake-key", cache, saveCache);
+    const client = new OmdbClient("fake-key", cache, saveCache, testFetcher);
 
     const result = await client.getSeries("tt13210838");
 
@@ -100,7 +105,7 @@ describe("OmdbClient", () => {
       ],
     };
     global.fetch = vi.fn().mockResolvedValue({ json: async () => mockResponse }) as any;
-    const client = new OmdbClient("fake-key", {}, vi.fn());
+    const client = new OmdbClient("fake-key", {}, vi.fn(), testFetcher);
 
     const results = await client.searchTitles("Severance", "series");
 
@@ -112,7 +117,7 @@ describe("OmdbClient", () => {
 
   it("returns an empty array with no key", async () => {
     global.fetch = vi.fn() as any;
-    const client = new OmdbClient("", {}, vi.fn());
+    const client = new OmdbClient("", {}, vi.fn(), testFetcher);
     const results = await client.searchTitles("Severance", "series");
     expect(results).toEqual([]);
     expect(fetch).not.toHaveBeenCalled();
