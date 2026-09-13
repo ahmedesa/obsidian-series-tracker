@@ -1,6 +1,6 @@
 {
   "name": "series-tracker",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Dashboard and episode tracker for TV series notes in Obsidian.",
   "main": "main.js",
   "scripts": {
