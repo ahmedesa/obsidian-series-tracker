@@ -41,6 +41,7 @@ export class MoviesView extends ItemView {
   private filterStatus: string | null = null;
   private filterGenre: string | null = null;
   private sortBy: SortBy = DEFAULT_SORT_BY;
+  private filterDebounceTimer: number | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: SeriesTrackerPlugin) {
     super(leaf);
@@ -161,7 +162,8 @@ export class MoviesView extends ItemView {
     filterInput.value = this.filterText;
     filterInput.addEventListener("input", () => {
       this.filterText = filterInput.value;
-      void this.render();
+      if (this.filterDebounceTimer !== null) window.clearTimeout(this.filterDebounceTimer);
+      this.filterDebounceTimer = window.setTimeout(() => void this.render(), 300);
     });
 
     const statusWrap = header.createDiv({ cls: "st-status-filter-wrap" });

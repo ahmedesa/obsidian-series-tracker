@@ -37,6 +37,7 @@ export class DashboardView extends ItemView {
   private filterStatus: string | null = null;
   private filterGenre: string | null = null;
   private sortBy: SortBy = DEFAULT_SORT_BY;
+  private filterDebounceTimer: number | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: SeriesTrackerPlugin) {
     super(leaf);
@@ -97,7 +98,7 @@ export class DashboardView extends ItemView {
       const cache = this.app.metadataCache.getFileCache(file);
       const fm = cache?.frontmatter;
       if (!fm || fm.type !== "series") continue;
-      const content = await this.app.vault.read(file);
+      const content = await this.app.vault.cachedRead(file);
       const { body } = splitFrontmatter(content);
       results.push({
         file,
@@ -162,7 +163,8 @@ export class DashboardView extends ItemView {
     filterInput.value = this.filterText;
     filterInput.addEventListener("input", () => {
       this.filterText = filterInput.value;
-      void this.render();
+      if (this.filterDebounceTimer !== null) window.clearTimeout(this.filterDebounceTimer);
+      this.filterDebounceTimer = window.setTimeout(() => void this.render(), 300);
     });
 
     // Status filter — a button that opens a dropdown of the 5 statuses,
