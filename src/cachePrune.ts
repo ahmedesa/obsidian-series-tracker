@@ -1,17 +1,23 @@
+const IMDB_ID_PREFIX_RE = /^tt\d+$/;
+
 /**
- * TMDb cache entries are keyed `<imdbId>:series`, `<imdbId>:<season>`,
- * `<imdbId>:resolve`, or `<imdbId>:providers:<country>` (see TmdbClient).
- * IMDb ids never contain a colon, so the first colon always delimits the
- * id — use indexOf, not lastIndexOf, or multi-colon keys (providers) mis-key.
- * Given the set of IMDb ids still tracked in the vault, returns which cache
- * keys to keep — everything else belongs to a show/movie the user has since
- * deleted.
+ * TMDb cache entries are keyed either per-item — `<imdbId>:series`,
+ * `<imdbId>:<season>`, `<imdbId>:resolve`, `<imdbId>:providers:<country>`
+ * (IMDb ids never contain a colon, so the first colon always delimits the
+ * id — use indexOf, not lastIndexOf, or multi-colon keys mis-key) — or
+ * global, not tied to any single item: `genre-map:<mediaType>`,
+ * `discover:<mediaType>:<genreIds>`. Only per-item keys are ever pruned;
+ * a key whose prefix doesn't look like an IMDb id (`tt<digits>`) is global
+ * and always kept. Given the set of IMDb ids still tracked in the vault,
+ * returns which cache keys to keep — everything else belongs to a
+ * show/movie the user has since deleted.
  */
 export function computeCacheKeysToKeep(cacheKeys: string[], liveImdbIds: Set<string>): string[] {
   return cacheKeys.filter((key) => {
     const idx = key.indexOf(":");
-    const imdbId = idx === -1 ? key : key.slice(0, idx);
-    return liveImdbIds.has(imdbId);
+    const prefix = idx === -1 ? key : key.slice(0, idx);
+    if (!IMDB_ID_PREFIX_RE.test(prefix)) return true;
+    return liveImdbIds.has(prefix);
   });
 }
 

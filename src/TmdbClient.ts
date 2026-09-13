@@ -69,7 +69,23 @@ interface ProvidersCacheEntry {
   data: TmdbWatchProvider[];
 }
 
-export type CacheEntry = DetailsCacheEntry | SeasonCacheEntry | ResolveCacheEntry | ProvidersCacheEntry;
+interface GenreMapCacheEntry {
+  fetchedAt: number;
+  data: Record<string, number>;
+}
+
+interface DiscoverCacheEntry {
+  fetchedAt: number;
+  data: TmdbSearchResult[];
+}
+
+export type CacheEntry =
+  | DetailsCacheEntry
+  | SeasonCacheEntry
+  | ResolveCacheEntry
+  | ProvidersCacheEntry
+  | GenreMapCacheEntry
+  | DiscoverCacheEntry;
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const TMDB_API_BASE = "https://api.themoviedb.org/3";
@@ -102,6 +118,30 @@ function logoUrl(path: string | null | undefined): string {
 
 function formatVote(vote: number | undefined | null): string {
   return vote && vote > 0 ? vote.toFixed(1) : "";
+}
+
+/** Shared by `searchTitles` and `discover` — both TMDb endpoints return the same result shape. */
+function mapSearchEntries(json: unknown, mediaType: "series" | "movie"): TmdbSearchResult[] {
+  if (mediaType === "series") {
+    const raw = json as TmdbRawSearchResponse<TmdbRawSearchTvEntry>;
+    return (raw.results ?? []).map((r) => ({
+      tmdbId: r.id,
+      title: r.name ?? "",
+      year: (r.first_air_date ?? "").slice(0, 4),
+      poster: posterUrl(r.poster_path),
+      rating: formatVote(r.vote_average),
+      plot: r.overview ?? "",
+    }));
+  }
+  const raw = json as TmdbRawSearchResponse<TmdbRawSearchMovieEntry>;
+  return (raw.results ?? []).map((r) => ({
+    tmdbId: r.id,
+    title: r.title ?? "",
+    year: (r.release_date ?? "").slice(0, 4),
+    poster: posterUrl(r.poster_path),
+    rating: formatVote(r.vote_average),
+    plot: r.overview ?? "",
+  }));
 }
 
 interface TmdbGenre {
@@ -177,6 +217,15 @@ interface TmdbRawFindResponse {
   tv_results?: TmdbRawSearchTvEntry[];
 }
 
+interface TmdbRawGenreEntry {
+  id: number;
+  name: string;
+}
+
+interface TmdbRawGenreListResponse {
+  genres?: TmdbRawGenreEntry[];
+}
+
 interface TmdbRawProviderEntry {
   provider_name?: string;
   logo_path?: string | null;
@@ -231,26 +280,7 @@ export class TmdbClient {
     try {
       const url = `${TMDB_API_BASE}/search/${path}?api_key=${this.apiKey}&query=${encodeURIComponent(title)}`;
       const { json } = await this.fetcher(url);
-      if (mediaType === "series") {
-        const raw = json as TmdbRawSearchResponse<TmdbRawSearchTvEntry>;
-        return (raw.results ?? []).map((r) => ({
-          tmdbId: r.id,
-          title: r.name ?? "",
-          year: (r.first_air_date ?? "").slice(0, 4),
-          poster: posterUrl(r.poster_path),
-          rating: formatVote(r.vote_average),
-          plot: r.overview ?? "",
-        }));
-      }
-      const raw = json as TmdbRawSearchResponse<TmdbRawSearchMovieEntry>;
-      return (raw.results ?? []).map((r) => ({
-        tmdbId: r.id,
-        title: r.title ?? "",
-        year: (r.release_date ?? "").slice(0, 4),
-        poster: posterUrl(r.poster_path),
-        rating: formatVote(r.vote_average),
-        plot: r.overview ?? "",
-      }));
+      return mapSearchEntries(json, mediaType);
     } catch {
       return [];
     }
@@ -435,5 +465,60 @@ export class TmdbClient {
     this.cache[key] = { fetchedAt: Date.now(), data };
     await this.saveCache(this.cache);
     return data;
+  }
+
+  /**
+   * Maps TMDb genre names (as stored in frontmatter) to TMDb's numeric genre
+   * ids, needed for `discover`. Cached permanently under `genre-map:<mediaType>`
+   * — TMDb's genre list changes rarely, no TTL check needed.
+   */
+  async getGenreMap(mediaType: "series" | "movie"): Promise<Record<string, number>> {
+    const key = `genre-map:${mediaType}`;
+    const cached = this.cache[key];
+    if (cached) return (cached as GenreMapCacheEntry).data;
+    if (!this.apiKey) return {};
+
+    try {
+      const path = mediaType === "series" ? "tv" : "movie";
+      const url = `${TMDB_API_BASE}/genre/${path}/list?api_key=${this.apiKey}`;
+      const { json } = await this.fetcher(url);
+      const raw = json as TmdbRawGenreListResponse;
+      const map: Record<string, number> = {};
+      for (const g of raw.genres ?? []) map[g.name] = g.id;
+
+      this.cache[key] = { fetchedAt: Date.now(), data: map };
+      await this.saveCache(this.cache);
+      return map;
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Popular titles in the given genre ids (TMDb's `discover` endpoint),
+   * sorted by popularity. Cached 24h under `discover:<mediaType>:<genreIds>`
+   * — the same cache pattern as every other lookup in this client.
+   */
+  async discover(mediaType: "series" | "movie", genreIds: number[]): Promise<TmdbSearchResult[]> {
+    if (genreIds.length === 0) return [];
+    const key = `discover:${mediaType}:${[...genreIds].sort((a, b) => a - b).join(",")}`;
+    const cached = this.cache[key];
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+      return (cached as DiscoverCacheEntry).data;
+    }
+    if (!this.apiKey) return (cached as DiscoverCacheEntry | undefined)?.data ?? [];
+
+    try {
+      const path = mediaType === "series" ? "tv" : "movie";
+      const url = `${TMDB_API_BASE}/discover/${path}?api_key=${this.apiKey}&with_genres=${genreIds.join(",")}&sort_by=popularity.desc`;
+      const { json } = await this.fetcher(url);
+      const data = mapSearchEntries(json, mediaType);
+
+      this.cache[key] = { fetchedAt: Date.now(), data };
+      await this.saveCache(this.cache);
+      return data;
+    } catch {
+      return (cached as DiscoverCacheEntry | undefined)?.data ?? [];
+    }
   }
 }

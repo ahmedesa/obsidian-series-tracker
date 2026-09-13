@@ -378,3 +378,55 @@ describe("TmdbClient.getWatchProvidersByImdbId", () => {
     expect(findFetcher).not.toHaveBeenCalled();
   });
 });
+
+describe("TmdbClient.getGenreMap", () => {
+  it("maps genre names to ids and caches permanently under genre-map:<mediaType>", async () => {
+    const fetcher = vi.fn(async () => ({
+      json: { genres: [{ id: 18, name: "Drama" }, { id: 80, name: "Crime" }] },
+    }));
+    const cache: Record<string, CacheEntry> = {};
+    const client = new TmdbClient("test-key", cache, async (c) => Object.assign(cache, c), fetcher);
+    const map = await client.getGenreMap("series");
+    expect(map).toEqual({ Drama: 18, Crime: 80 });
+    expect(cache["genre-map:series"]).toBeDefined();
+
+    await client.getGenreMap("series");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns {} with no api key", async () => {
+    const client = new TmdbClient("", {}, vi.fn(), makeFetcher(() => ({})));
+    expect(await client.getGenreMap("series")).toEqual({});
+  });
+});
+
+describe("TmdbClient.discover", () => {
+  it("fetches popular titles for the given genre ids, caching by sorted genre ids", async () => {
+    const { client, cache } = newClient((url) => {
+      expect(url).toContain("/discover/tv");
+      expect(url).toContain("with_genres=80,18");
+      return { results: [{ id: 5, name: "Ozark", first_air_date: "2017-07-21", poster_path: "/o.jpg", vote_average: 8.4, overview: "A financial planner." }] };
+    });
+    const results = await client.discover("series", [80, 18]);
+    expect(results).toEqual([
+      { tmdbId: 5, title: "Ozark", year: "2017", poster: "https://image.tmdb.org/t/p/w500/o.jpg", rating: "8.4", plot: "A financial planner." },
+    ]);
+    expect(cache["discover:series:18,80"]).toBeDefined();
+  });
+
+  it("returns [] for an empty genre id list", async () => {
+    const { client } = newClient(() => ({ results: [] }));
+    expect(await client.discover("series", [])).toEqual([]);
+  });
+
+  it("serves from cache within TTL without re-fetching", async () => {
+    const fetcher = vi.fn(async () => ({ json: { results: [] } }));
+    const cache: Record<string, CacheEntry> = {
+      "discover:movie:18": { fetchedAt: Date.now(), data: [{ tmdbId: 1, title: "X", year: "2020", poster: "", rating: "", plot: "" }] },
+    };
+    const client = new TmdbClient("test-key", cache, vi.fn(), fetcher);
+    const results = await client.discover("movie", [18]);
+    expect(results).toHaveLength(1);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});

@@ -14,12 +14,16 @@ describe("computeCacheKeysToKeep", () => {
     expect(kept.sort()).toEqual(["tt001:1", "tt001:series"]);
   });
 
-  it("drops a key with no ':' entirely if its imdb id isn't live", () => {
+  it("keeps a key whose prefix doesn't look like an IMDb id, regardless of live set", () => {
+    // A prefix that isn't `tt<digits>` isn't a per-item key at all — it's
+    // global (see genre-map/discover below) or malformed, and either way
+    // pruning it based on an unrelated "is this an IMDb id" set would be
+    // wrong, so such keys are always kept.
     const kept = computeCacheKeysToKeep(["nocolon"], new Set(["tt001"]));
-    expect(kept).toEqual([]);
+    expect(kept).toEqual(["nocolon"]);
   });
 
-  it("returns empty when live set is empty", () => {
+  it("returns empty when live set is empty and every key is IMDb-id-prefixed", () => {
     expect(computeCacheKeysToKeep(["tt001:series"], new Set())).toEqual([]);
   });
 
@@ -27,6 +31,12 @@ describe("computeCacheKeysToKeep", () => {
     const keys = ["tt001:providers:US", "tt001:providers:GB", "tt999:providers:US"];
     const kept = computeCacheKeysToKeep(keys, new Set(["tt001"]));
     expect(kept.sort()).toEqual(["tt001:providers:GB", "tt001:providers:US"]);
+  });
+
+  it("always keeps global genre-map/discover keys, even with an empty live set", () => {
+    const keys = ["genre-map:series", "genre-map:movie", "discover:series:18,80", "tt001:series"];
+    const kept = computeCacheKeysToKeep(keys, new Set());
+    expect(kept.sort()).toEqual(["discover:series:18,80", "genre-map:movie", "genre-map:series"]);
   });
 });
 
