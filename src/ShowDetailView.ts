@@ -284,6 +284,7 @@ export async function renderShowDetail(
         if (info.plot) panel.createEl("p", { cls: "st-info-plot", text: info.plot });
         const meta = panel.createDiv({ cls: "st-info-meta" });
         const fields: [string, string][] = [
+          ["Airing status", info.seriesEnded ? "Ended" : "Returning"],
           ["Rated", info.rated],
           ["Runtime", info.runtime],
           ["Country", info.country],
