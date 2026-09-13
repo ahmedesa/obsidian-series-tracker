@@ -9,12 +9,15 @@ import {
   getNotesSection,
   setNotesSection,
   extractImdbId,
+  normalizeFolderPath,
   MOVIE_STATUS_OPTIONS,
   movieStatusLabel,
 } from "./MovieParser";
 import { AddMovieModal } from "./AddMovieModal";
 import { OmdbClient, OmdbFetcher } from "./OmdbClient";
 import { todayIso } from "./dateUtil";
+import { ConfirmModal } from "./ConfirmModal";
+import { pruneOmdbCache } from "./cachePrune";
 
 export const VIEW_TYPE_MOVIES = "series-tracker-movies";
 
@@ -73,12 +76,12 @@ export class MoviesView extends ItemView {
 
   private isRelevantFile(file: TFile): boolean {
     if (this.currentFile) return file.path === this.currentFile.path;
-    const folder = this.plugin.settings.moviesFolder;
+    const folder = normalizeFolderPath(this.plugin.settings.moviesFolder);
     return file.path.startsWith(folder + "/");
   }
 
   async loadAllMovies(): Promise<{ file: TFile; parsed: ParsedMovie }[]> {
-    const folder = this.plugin.settings.moviesFolder;
+    const folder = normalizeFolderPath(this.plugin.settings.moviesFolder);
     const files = this.app.vault
       .getMarkdownFiles()
       .filter((f) => f.path.startsWith(folder + "/") && !f.path.includes("/_bases/"));
@@ -120,6 +123,21 @@ export class MoviesView extends ItemView {
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass("series-tracker-view");
+
+    const folder = normalizeFolderPath(this.plugin.settings.moviesFolder);
+    const folderExists = await this.app.vault.adapter.exists(folder);
+    if (generation !== this.renderGeneration) return;
+    if (!folderExists) {
+      container.createEl("p", {
+        cls: "st-folder-missing",
+        text: `Configured movies folder "${folder}" doesn't exist. Check Settings → Series Tracker.`,
+      });
+      return;
+    }
+
+    // Fire-and-forget: drop OMDb cache entries for shows/movies no longer
+    // tracked. Never awaited — must not delay or race the render below.
+    this.pruneCache();
 
     const header = container.createDiv({ cls: "st-dashboard-header" });
 
@@ -206,8 +224,26 @@ export class MoviesView extends ItemView {
       });
     }
 
-    if (filtered.length === 0 && all.length > 0) {
+    if (all.length === 0) {
+      grid.createEl("p", { cls: "st-empty-state", text: "No movies tracked yet — click + Add movie to get started." });
+    } else if (filtered.length === 0) {
       grid.createEl("p", { cls: "st-empty-state", text: "No movies match the current filter." });
+    }
+  }
+
+  /**
+   * Drops OMDb cache entries for shows/movies no longer tracked in the
+   * vault. Fire-and-forget: only saves settings when something changed.
+   */
+  private async pruneCache(): Promise<void> {
+    try {
+      const liveImdbIds = this.plugin.getAllLiveImdbIds();
+      const { pruned, removedCount } = pruneOmdbCache(this.plugin.settings.omdbCache, liveImdbIds);
+      if (removedCount === 0) return;
+      this.plugin.settings.omdbCache = pruned;
+      await this.plugin.saveSettings();
+    } catch (err) {
+      console.error("Series Tracker: failed to prune OMDb cache", err);
     }
   }
 
@@ -224,7 +260,16 @@ export class MoviesView extends ItemView {
       this.render();
     });
 
-    await this.renderMovieDetail(container, file, () => this.render(), () => generation === this.renderGeneration);
+    await this.renderMovieDetail(
+      container,
+      file,
+      () => this.render(),
+      () => generation === this.renderGeneration,
+      () => {
+        this.currentFile = null;
+        this.render();
+      },
+    );
   }
 
   private async renderMovieDetail(
@@ -232,6 +277,7 @@ export class MoviesView extends ItemView {
     file: TFile,
     onChange: () => void,
     isCurrent: () => boolean,
+    onDeleted: () => void,
   ): Promise<void> {
     try {
       const content = await this.app.vault.read(file);
@@ -380,6 +426,31 @@ export class MoviesView extends ItemView {
             new Notice(`Series Tracker: failed to save notes — ${errorMessage(err)}`);
           }
         }, 600);
+      });
+
+      // Delete — the only way to remove a tracked movie from the UI
+      // (previously required deleting the note file directly in Obsidian).
+      // Moves the note to Obsidian's trash, never a hard filesystem delete,
+      // and only ever runs on an explicit confirmed click.
+      const deleteSection = container.createDiv({ cls: "st-delete-section" });
+      const deleteBtn = deleteSection.createEl("button", { cls: "st-delete-btn", text: "Delete movie" });
+      deleteBtn.addEventListener("click", () => {
+        new ConfirmModal(
+          this.app,
+          "Delete movie?",
+          `This moves "${fm.title}" to Obsidian's trash. You can restore it from there if this was a mistake.`,
+          "Delete",
+          async () => {
+            try {
+              await this.app.fileManager.trashFile(file);
+              new Notice(`Deleted "${fm.title}"`);
+              onDeleted();
+            } catch (err) {
+              console.error("Series Tracker: failed to delete movie", err);
+              new Notice(`Series Tracker: failed to delete movie — ${errorMessage(err)}`);
+            }
+          },
+        ).open();
       });
     } catch (err) {
       console.error("Series Tracker: failed to render movie detail", err);

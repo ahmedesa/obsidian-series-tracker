@@ -5,6 +5,7 @@ export {
   getNotesSection,
   setNotesSection,
   extractImdbId,
+  normalizeFolderPath,
 } from "./SeriesParser";
 export type { FrontmatterSplit } from "./SeriesParser";
 

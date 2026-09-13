@@ -227,6 +227,11 @@ export function parseFrontmatter(fm: Record<string, any>): SeriesFrontmatter {
   };
 }
 
+/** Strips trailing slashes so `"Media/Series/"` and `"Media/Series"` match identically. */
+export function normalizeFolderPath(folder: string): string {
+  return folder.replace(/\/+$/, "");
+}
+
 export function extractImdbId(sourceUrl: string): string | null {
   const m = sourceUrl.match(/title\/(tt\d+)/);
   return m ? m[1] : null;

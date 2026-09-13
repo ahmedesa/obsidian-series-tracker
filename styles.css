@@ -180,6 +180,30 @@
   color: var(--text-muted);
   grid-column: 1 / -1;
 }
+.st-folder-missing {
+  color: var(--text-error);
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.st-delete-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.st-delete-btn {
+  color: var(--text-error);
+}
+.st-confirm-btn-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.st-confirm-danger-btn {
+  background: var(--background-modifier-error);
+  color: var(--text-on-accent);
+}
 .st-status-row {
   display: flex;
   align-items: center;

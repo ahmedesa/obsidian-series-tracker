@@ -18,6 +18,7 @@ import {
 } from "./SeriesParser";
 import { todayIso, isAired } from "./dateUtil";
 import { OmdbClient, OmdbFetcher } from "./OmdbClient";
+import { ConfirmModal } from "./ConfirmModal";
 
 /** Routes OMDb requests through Obsidian's CORS-safe requestUrl API. */
 const obsidianOmdbFetcher: OmdbFetcher = async (url) => {
@@ -32,6 +33,7 @@ export async function renderShowDetail(
   file: TFile,
   onChange: () => void,
   isCurrent: () => boolean = () => true,
+  onDeleted: () => void = () => {},
 ): Promise<void> {
   try {
     const content = await app.vault.read(file);
@@ -309,6 +311,31 @@ export async function renderShowDetail(
           new Notice(`Series Tracker: failed to save notes — ${errorMessage(err)}`);
         }
       }, 600);
+    });
+
+    // Delete — the only way to remove a tracked show from the UI (previously
+    // required deleting the note file directly in Obsidian). Moves the note
+    // to Obsidian's trash (system/.trash per user settings), never a hard
+    // filesystem delete, and only ever runs on an explicit confirmed click.
+    const deleteSection = container.createDiv({ cls: "st-delete-section" });
+    const deleteBtn = deleteSection.createEl("button", { cls: "st-delete-btn", text: "Delete show" });
+    deleteBtn.addEventListener("click", () => {
+      new ConfirmModal(
+        app,
+        "Delete show?",
+        `This moves "${fm.title}" to Obsidian's trash. You can restore it from there if this was a mistake.`,
+        "Delete",
+        async () => {
+          try {
+            await app.fileManager.trashFile(file);
+            new Notice(`Deleted "${fm.title}"`);
+            onDeleted();
+          } catch (err) {
+            console.error("Series Tracker: failed to delete show", err);
+            new Notice(`Series Tracker: failed to delete show — ${errorMessage(err)}`);
+          }
+        },
+      ).open();
     });
 
     if (!imdbId || seasons.length === 0) return;

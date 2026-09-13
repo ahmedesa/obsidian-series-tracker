@@ -12,6 +12,7 @@ import {
   setNotesSection,
   mergeNewEpisodes,
   deriveStatus,
+  normalizeFolderPath,
 } from "../src/SeriesParser";
 
 describe("parseSeriesBody", () => {
@@ -64,6 +65,20 @@ describe("extractImdbId", () => {
 
   it("returns null for a non-IMDb url", () => {
     expect(extractImdbId("https://example.com")).toBeNull();
+  });
+});
+
+describe("normalizeFolderPath", () => {
+  it("strips a single trailing slash", () => {
+    expect(normalizeFolderPath("Media/Series/")).toBe("Media/Series");
+  });
+
+  it("strips multiple trailing slashes", () => {
+    expect(normalizeFolderPath("Media/Series///")).toBe("Media/Series");
+  });
+
+  it("leaves a path with no trailing slash unchanged", () => {
+    expect(normalizeFolderPath("Media/Series")).toBe("Media/Series");
   });
 });
 

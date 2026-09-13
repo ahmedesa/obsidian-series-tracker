@@ -6,6 +6,7 @@ import {
   splitFrontmatter,
   extractImdbId,
   toggleEpisodeLine,
+  normalizeFolderPath,
   ParsedSeries,
   STATUS_OPTIONS,
   statusLabel,
@@ -16,6 +17,7 @@ import { OmdbClient, OmdbFetcher, parseRuntimeMinutes } from "./OmdbClient";
 import { todayIso } from "./dateUtil";
 import { UpcomingEpisode, findNextUp, findUpcoming, groupUpcomingByDate } from "./upcoming";
 import { findRecentlyWatched } from "./recentlyWatched";
+import { pruneOmdbCache } from "./cachePrune";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
 
@@ -72,12 +74,12 @@ export class DashboardView extends ItemView {
 
   private isRelevantFile(file: TFile): boolean {
     if (this.currentFile) return file.path === this.currentFile.path;
-    const folder = this.plugin.settings.seriesFolder;
+    const folder = normalizeFolderPath(this.plugin.settings.seriesFolder);
     return file.path.startsWith(folder + "/");
   }
 
   async loadAllSeries(): Promise<{ file: TFile; parsed: ParsedSeries }[]> {
-    const folder = this.plugin.settings.seriesFolder;
+    const folder = normalizeFolderPath(this.plugin.settings.seriesFolder);
     const files = this.app.vault
       .getMarkdownFiles()
       .filter((f) => f.path.startsWith(folder + "/") && !f.path.includes("/_bases/"));
@@ -122,6 +124,22 @@ export class DashboardView extends ItemView {
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass("series-tracker-view");
+
+    const folder = normalizeFolderPath(this.plugin.settings.seriesFolder);
+    const folderExists = await this.app.vault.adapter.exists(folder);
+    if (generation !== this.renderGeneration) return;
+    if (!folderExists) {
+      container.createEl("p", {
+        cls: "st-folder-missing",
+        text: `Configured series folder "${folder}" doesn't exist. Check Settings → Series Tracker.`,
+      });
+      return;
+    }
+
+    // Fire-and-forget: drop OMDb cache entries for shows no longer tracked.
+    // Never awaited/blocking — a stale cache entry costs nothing but disk
+    // space, so this must not delay or race the render above it.
+    this.pruneCache();
 
     const header = container.createDiv({ cls: "st-dashboard-header" });
 
@@ -236,7 +254,9 @@ export class DashboardView extends ItemView {
       });
     }
 
-    if (filtered.length === 0 && all.length > 0) {
+    if (all.length === 0) {
+      grid.createEl("p", { cls: "st-empty-state", text: "No series tracked yet — click + Add series to get started." });
+    } else if (filtered.length === 0) {
       grid.createEl("p", { cls: "st-empty-state", text: "No shows match the current filter." });
     }
 
@@ -281,6 +301,23 @@ export class DashboardView extends ItemView {
       .catch((err) => {
         console.error("Series Tracker: failed to compute time spent watching", err);
       });
+  }
+
+  /**
+   * Drops OMDb cache entries for shows no longer tracked in the vault.
+   * Fire-and-forget: never awaited by the caller, and only saves settings
+   * when something was actually removed.
+   */
+  private async pruneCache(): Promise<void> {
+    try {
+      const liveImdbIds = this.plugin.getAllLiveImdbIds();
+      const { pruned, removedCount } = pruneOmdbCache(this.plugin.settings.omdbCache, liveImdbIds);
+      if (removedCount === 0) return;
+      this.plugin.settings.omdbCache = pruned;
+      await this.plugin.saveSettings();
+    } catch (err) {
+      console.error("Series Tracker: failed to prune OMDb cache", err);
+    }
   }
 
   /**
@@ -467,6 +504,10 @@ export class DashboardView extends ItemView {
       file,
       () => this.render(),
       () => generation === this.renderGeneration,
+      () => {
+        this.currentFile = null;
+        this.render();
+      },
     );
   }
 
