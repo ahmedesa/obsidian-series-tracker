@@ -67,14 +67,11 @@ listing. Notes still store an IMDb URL in `source_url` for portability; the
 plugin resolves that to TMDb's internal id automatically whenever it needs
 to fetch data (via TMDb's `find` endpoint, cached permanently once resolved).
 
-## Install (local, not yet on the community plugin store)
+## Install
 
-1. `npm install && npm run build`
-2. Copy `main.js`, `manifest.json`, `styles.css` into
-   `<vault>/.obsidian/plugins/series-tracker/`
-3. Add `"series-tracker"` to `<vault>/.obsidian/community-plugins.json`
-4. Restart Obsidian, enable it in Settings → Community plugins if needed.
-5. Get a free TMDb API key and set it in Settings → Series Tracker:
+1. In Obsidian: Settings → Community plugins → Browse → search
+   "Series Tracker" → Install → Enable.
+2. Get a free TMDb API key and set it in Settings → Series Tracker:
    1. Go to [themoviedb.org](https://www.themoviedb.org/) and create a
       free account (or sign in).
    2. Go to [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api)
@@ -83,7 +80,7 @@ to fetch data (via TMDb's `find` endpoint, cached permanently once resolved).
    3. Copy the **API Key (v3 auth)** value.
    4. In Obsidian: Settings → Series Tracker → paste it into the
       **TMDb API key** field.
-6. Set your series folder and movies folder in Settings → Series Tracker
+3. Set your series folder and movies folder in Settings → Series Tracker
    (defaults: `Media/Series`, `Media/Movies`).
 
 ## Note format
