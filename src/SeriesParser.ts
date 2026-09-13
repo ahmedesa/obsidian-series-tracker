@@ -24,6 +24,26 @@ export interface ParsedSeries {
   filePath: string;
 }
 
+export interface FrontmatterSplit {
+  frontmatterBlock: string;
+  body: string;
+}
+
+const FRONTMATTER_RE = /^---\n[\s\S]*?\n---\n?/;
+
+/**
+ * Splits note content into its frontmatter block (including fences and
+ * trailing newline) and the remaining body. Content with no frontmatter
+ * returns an empty frontmatter block and the whole content as body.
+ */
+export function splitFrontmatter(content: string): FrontmatterSplit {
+  const match = content.match(FRONTMATTER_RE);
+  if (!match) {
+    return { frontmatterBlock: "", body: content };
+  }
+  return { frontmatterBlock: match[0], body: content.slice(match[0].length) };
+}
+
 const SEASON_HEADING_RE = /^##\s+Season\s+(\d+)\s*$/;
 const EPISODE_LINE_RE = /^-\s+\[( |x|X)\]\s+E(\d+)\s*(?:—|-)?\s*(.*)$/;
 

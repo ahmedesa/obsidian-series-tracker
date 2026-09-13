@@ -1,6 +1,6 @@
-import { ItemView, WorkspaceLeaf, TFile } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Notice } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
-import { parseSeriesBody, parseFrontmatter, ParsedSeries } from "./SeriesParser";
+import { parseSeriesBody, parseFrontmatter, splitFrontmatter, ParsedSeries } from "./SeriesParser";
 import { renderShowDetail } from "./ShowDetailView";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
@@ -8,6 +8,9 @@ export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
 export class DashboardView extends ItemView {
   plugin: SeriesTrackerPlugin;
   private currentFile: TFile | null = null;
+  // Monotonically-incrementing counter so overlapping async renders can
+  // detect they've been superseded and bail out before touching the DOM.
+  private renderGeneration = 0;
 
   constructor(leaf: WorkspaceLeaf, plugin: SeriesTrackerPlugin) {
     super(leaf);
@@ -27,7 +30,20 @@ export class DashboardView extends ItemView {
   }
 
   async onOpen() {
+    this.registerEvent(
+      this.app.vault.on("modify", (file) => {
+        if (file instanceof TFile && this.isRelevantFile(file)) {
+          this.render();
+        }
+      }),
+    );
     await this.render();
+  }
+
+  private isRelevantFile(file: TFile): boolean {
+    if (this.currentFile) return file.path === this.currentFile.path;
+    const folder = this.plugin.settings.seriesFolder;
+    return file.path.startsWith(folder + "/");
   }
 
   async loadAllSeries(): Promise<{ file: TFile; parsed: ParsedSeries }[]> {
@@ -42,7 +58,7 @@ export class DashboardView extends ItemView {
       const fm = cache?.frontmatter;
       if (!fm || fm.type !== "series") continue;
       const content = await this.app.vault.read(file);
-      const body = content.replace(/^---[\s\S]*?---\n?/, "");
+      const { body } = splitFrontmatter(content);
       results.push({
         file,
         parsed: {
@@ -56,19 +72,26 @@ export class DashboardView extends ItemView {
   }
 
   async render() {
-    if (this.currentFile) {
-      await this.renderDetail(this.currentFile);
-    } else {
-      await this.renderDashboard();
+    const generation = ++this.renderGeneration;
+    try {
+      if (this.currentFile) {
+        await this.renderDetail(this.currentFile, generation);
+      } else {
+        await this.renderDashboard(generation);
+      }
+    } catch (err) {
+      console.error("Series Tracker: failed to render view", err);
+      new Notice(`Series Tracker failed to render: ${errorMessage(err)}`);
     }
   }
 
-  async renderDashboard() {
+  async renderDashboard(generation: number) {
+    const all = await this.loadAllSeries();
+    if (generation !== this.renderGeneration) return;
+
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass("series-tracker-view");
-
-    const all = await this.loadAllSeries();
 
     let totalEp = 0;
     let watchedEp = 0;
@@ -113,7 +136,9 @@ export class DashboardView extends ItemView {
     }
   }
 
-  async renderDetail(file: TFile) {
+  async renderDetail(file: TFile, generation: number) {
+    if (generation !== this.renderGeneration) return;
+
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass("series-tracker-view");
@@ -124,8 +149,19 @@ export class DashboardView extends ItemView {
       this.render();
     });
 
-    await renderShowDetail(container, this.app, this.plugin, file, () => this.render());
+    await renderShowDetail(
+      container,
+      this.app,
+      this.plugin,
+      file,
+      () => this.render(),
+      () => generation === this.renderGeneration,
+    );
   }
 
   async onClose() {}
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseSeriesBody, parseFrontmatter, extractImdbId, toggleEpisodeLine } from "../src/SeriesParser";
+import { parseSeriesBody, parseFrontmatter, extractImdbId, toggleEpisodeLine, splitFrontmatter } from "../src/SeriesParser";
 
 describe("parseSeriesBody", () => {
   it("parses seasons and episodes with watched state", () => {
@@ -51,6 +51,37 @@ describe("extractImdbId", () => {
 
   it("returns null for a non-IMDb url", () => {
     expect(extractImdbId("https://example.com")).toBeNull();
+  });
+});
+
+describe("splitFrontmatter", () => {
+  it("splits frontmatter and body when frontmatter is present", () => {
+    const content = ["---", "title: The Gentlemen", "type: series", "---", "## Season 1", "- [ ] E1 — Pilot"].join(
+      "\n",
+    );
+
+    const { frontmatterBlock, body } = splitFrontmatter(content);
+
+    expect(frontmatterBlock).toBe("---\ntitle: The Gentlemen\ntype: series\n---\n");
+    expect(body).toBe("## Season 1\n- [ ] E1 — Pilot");
+  });
+
+  it("returns the whole content as body with an empty frontmatter block when there is no frontmatter", () => {
+    const content = "## Season 1\n- [ ] E1 — Pilot";
+
+    const { frontmatterBlock, body } = splitFrontmatter(content);
+
+    expect(frontmatterBlock).toBe("");
+    expect(body).toBe(content);
+  });
+
+  it("does not get confused by a '---' appearing inside the body", () => {
+    const content = ["---", "title: X", "---", "Some note", "---", "more text"].join("\n");
+
+    const { frontmatterBlock, body } = splitFrontmatter(content);
+
+    expect(frontmatterBlock).toBe("---\ntitle: X\n---\n");
+    expect(body).toBe("Some note\n---\nmore text");
   });
 });
 

@@ -1,7 +1,13 @@
-import { App, TFile } from "obsidian";
+import { App, TFile, Notice, requestUrl } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
-import { parseSeriesBody, parseFrontmatter, extractImdbId, toggleEpisodeLine } from "./SeriesParser";
-import { OmdbClient, OmdbSeasonResponse } from "./OmdbClient";
+import { parseSeriesBody, parseFrontmatter, extractImdbId, toggleEpisodeLine, splitFrontmatter } from "./SeriesParser";
+import { OmdbClient, OmdbFetcher } from "./OmdbClient";
+
+/** Routes OMDb requests through Obsidian's CORS-safe requestUrl API. */
+const obsidianOmdbFetcher: OmdbFetcher = async (url) => {
+  const res = await requestUrl({ url });
+  return { json: res.json };
+};
 
 export async function renderShowDetail(
   container: Element,
@@ -9,62 +15,98 @@ export async function renderShowDetail(
   plugin: SeriesTrackerPlugin,
   file: TFile,
   onChange: () => void,
+  isCurrent: () => boolean = () => true,
 ): Promise<void> {
-  const content = await app.vault.read(file);
-  const fmMatch = content.match(/^---\n[\s\S]*?\n---\n?/);
-  const body = fmMatch ? content.slice(fmMatch[0].length) : content;
-  const bodyLines = body.split("\n");
+  try {
+    const content = await app.vault.read(file);
+    if (!isCurrent()) return;
 
-  const cache = app.metadataCache.getFileCache(file);
-  const fm = parseFrontmatter(cache?.frontmatter ?? {});
-  const seasons = parseSeriesBody(body);
+    const { body } = splitFrontmatter(content);
+    const cache = app.metadataCache.getFileCache(file);
+    const fm = parseFrontmatter(cache?.frontmatter ?? {});
+    const seasons = parseSeriesBody(body);
 
-  container.createEl("h2", { text: fm.title });
+    container.createEl("h2", { text: fm.title });
 
-  const imdbId = extractImdbId(fm.source_url);
-  const omdb = new OmdbClient(
-    plugin.settings.omdbApiKey,
-    plugin.settings.omdbCache,
-    async (c) => {
-      plugin.settings.omdbCache = c;
-      await plugin.saveSettings();
-    },
-  );
+    // Render immediately from local data; OMDb air-date badges are patched
+    // in once (parallel) fetches resolve, below.
+    const rowsByKey: Record<string, HTMLElement> = {};
 
-  const seasonData: Record<number, OmdbSeasonResponse | null> = {};
-  if (imdbId) {
     for (const season of seasons) {
-      seasonData[season.number] = await omdb.getSeason(imdbId, season.number);
+      container.createEl("h3", { text: `Season ${season.number}` });
+      const list = container.createDiv({ cls: "st-episode-list" });
+
+      for (const ep of season.episodes) {
+        const row = list.createDiv({ cls: "st-episode-row" });
+        const checkbox = row.createEl("input", { type: "checkbox" });
+        checkbox.checked = ep.watched;
+        row.createSpan({ text: ` E${ep.number} — ${ep.title}` });
+        rowsByKey[`${season.number}:${ep.number}`] = row;
+
+        checkbox.addEventListener("change", async () => {
+          const desired = checkbox.checked;
+          try {
+            await app.vault.process(file, (data) => {
+              const live = splitFrontmatter(data);
+              const liveLines = live.body.split("\n");
+              const newLines = toggleEpisodeLine(liveLines, ep.lineIndex, desired);
+              return live.frontmatterBlock + newLines.join("\n");
+            });
+            onChange();
+          } catch (err) {
+            checkbox.checked = !desired;
+            console.error("Series Tracker: failed to write episode state", err);
+            new Notice(`Series Tracker: failed to update episode — ${errorMessage(err)}`);
+          }
+        });
+      }
     }
-  }
 
-  for (const season of seasons) {
-    container.createEl("h3", { text: `Season ${season.number}` });
-    const list = container.createDiv({ cls: "st-episode-list" });
-    const omdbSeason = seasonData[season.number];
+    const imdbId = extractImdbId(fm.source_url);
+    if (!imdbId || seasons.length === 0) return;
 
-    for (const ep of season.episodes) {
-      const row = list.createDiv({ cls: "st-episode-row" });
-      const checkbox = row.createEl("input", { type: "checkbox" });
-      checkbox.checked = ep.watched;
-      row.createSpan({ text: ` E${ep.number} — ${ep.title}` });
+    const omdb = new OmdbClient(
+      plugin.settings.omdbApiKey,
+      plugin.settings.omdbCache,
+      async (c) => {
+        plugin.settings.omdbCache = c;
+        await plugin.saveSettings();
+      },
+      obsidianOmdbFetcher,
+    );
 
-      const omdbEp = omdbSeason?.episodes.find((e) => e.episode === ep.number);
-      if (omdbEp && omdbEp.released) {
+    const seasonResults = await Promise.all(
+      seasons.map(async (season) => {
+        const data = await omdb.getSeason(imdbId, season.number);
+        return { number: season.number, data };
+      }),
+    );
+
+    if (!isCurrent()) return;
+
+    for (const { number, data } of seasonResults) {
+      if (!data) continue;
+      const season = seasons.find((s) => s.number === number);
+      if (!season) continue;
+      for (const ep of season.episodes) {
+        const omdbEp = data.episodes.find((e) => e.episode === ep.number);
+        if (!omdbEp || !omdbEp.released) continue;
         const released = new Date(omdbEp.released);
         const aired = !isNaN(released.getTime()) && released.getTime() <= Date.now();
         if (aired && !ep.watched) {
-          row.createSpan({ cls: "st-badge-pending", text: " aired, unwatched" });
+          const row = rowsByKey[`${number}:${ep.number}`];
+          row?.createSpan({ cls: "st-badge-pending", text: " aired, unwatched" });
         }
       }
-
-      checkbox.addEventListener("change", async () => {
-        const newLines = toggleEpisodeLine(bodyLines, ep.lineIndex, checkbox.checked);
-        const newBody = newLines.join("\n");
-        const newContent = fmMatch ? fmMatch[0] + newBody : newBody;
-        await app.vault.modify(file, newContent);
-        onChange();
-      });
+    }
+  } catch (err) {
+    console.error("Series Tracker: failed to render show detail", err);
+    if (isCurrent()) {
+      new Notice(`Series Tracker: failed to load show — ${errorMessage(err)}`);
     }
   }
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
