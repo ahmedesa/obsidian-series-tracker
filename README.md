@@ -14,7 +14,7 @@ never owning your data.
   tracked shows) and an "Upcoming" list grouped by air date
 - "Recently watched" feed
 - Per-show detail view: season/episode checklists, per-episode watched-date
-  stamps, "Mark season as watched", a "Refresh from OMDb" button that pulls
+  stamps, "Mark season as watched", a "Refresh from TMDb" button that pulls
   in newly-aired episodes without touching your existing watch state
 - Automatic status (Wishlist / Pending / Up to date / Completed), derived
   from watch state and air dates — "Abandoned" is the one status you set
@@ -23,12 +23,20 @@ never owning your data.
 
 **Movies**
 - Dashboard: poster grid, text + status filters, stats
-- Add via OMDb search (poster, genre, plot, etc. filled in automatically)
+- Add via TMDb search (poster, genre, plot, etc. filled in automatically)
 - Personal 0–5 rating, favourite toggle, status (Want to Watch / Watching /
   Watched — stamps a completion date), Notes section
 
 Both sections search and fetch metadata from the free
-[OMDb API](https://www.omdbapi.com/apikey.aspx) — you'll need your own key.
+[TMDb API](https://www.themoviedb.org/settings/api) — you'll need your own
+key. TMDb was chosen over OMDb specifically because it indexes translated
+titles, so searching in a non-English language (e.g. Arabic) actually finds
+results — OMDb only matches a title's single primary (usually English)
+listing. Notes still store an IMDb URL in `source_url` for portability; the
+plugin resolves that to TMDb's internal id automatically whenever it needs
+to fetch data (via TMDb's `find` endpoint, cached permanently once resolved).
+Can't find something by title? Use the "Add by IMDb ID/URL" field instead —
+it works regardless of search-index coverage.
 
 ## Install (local, not yet on the community plugin store)
 
@@ -37,7 +45,7 @@ Both sections search and fetch metadata from the free
    `<vault>/.obsidian/plugins/series-tracker/`
 3. Add `"series-tracker"` to `<vault>/.obsidian/community-plugins.json`
 4. Restart Obsidian, enable it in Settings → Community plugins if needed.
-5. Set your OMDb API key, series folder, and movies folder in
+5. Set your TMDb API key, series folder, and movies folder in
    Settings → Series Tracker.
 
 ## Note format
@@ -78,8 +86,9 @@ image: https://example.com/poster.jpg
   / `abandoned`. The first four are auto-managed from watch state; only
   `abandoned` is a pure manual choice the plugin never overwrites.
 - `rating` — `0`–`5` or `null`.
-- `source_url` — an IMDb title URL. When present, its IMDb id is used to
-  fetch season/episode air dates and series metadata from OMDb.
+- `source_url` — an IMDb title URL. When present, its IMDb id is resolved to
+  a TMDb id (cached) and used to fetch season/episode air dates and series
+  metadata from TMDb.
 - `image` — poster URL, must be an **absolute URL**.
 - Each season starts with a `## Season N` heading; episodes are Markdown
   task items directly under it, `- [ ] E<number> — <title>`. Checking a box

@@ -1,18 +1,18 @@
 import { App, Modal, Notice, normalizePath, requestUrl } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
-import { OmdbClient, OmdbFetcher, OmdbSearchResult } from "./OmdbClient";
+import { TmdbClient, TmdbFetcher, TmdbSearchResult } from "./TmdbClient";
 import { todayIso } from "./dateUtil";
 import { parseImdbId } from "./SeriesParser";
 
 /** Hard cap on seasons fetched at add-time, to bound API calls for long-running shows. */
 const MAX_SEASONS_ON_ADD = 25;
 
-const obsidianOmdbFetcher: OmdbFetcher = async (url) => {
+const obsidianTmdbFetcher: TmdbFetcher = async (url) => {
   const res = await requestUrl({ url });
   return { json: res.json };
 };
 
-/** Modal: search OMDb by title, pick a result, create a series note for it. */
+/** Modal: search TMDb by title, pick a result, create a series note for it. */
 export class AddSeriesModal extends Modal {
   private plugin: SeriesTrackerPlugin;
   private onAdded: () => void;
@@ -22,6 +22,18 @@ export class AddSeriesModal extends Modal {
     super(app);
     this.plugin = plugin;
     this.onAdded = onAdded;
+  }
+
+  private newClient(): TmdbClient {
+    return new TmdbClient(
+      this.plugin.settings.tmdbApiKey,
+      this.plugin.settings.tmdbCache,
+      async (c) => {
+        this.plugin.settings.tmdbCache = c;
+        await this.plugin.saveSettings();
+      },
+      obsidianTmdbFetcher,
+    );
   }
 
   onOpen(): void {
@@ -44,18 +56,9 @@ export class AddSeriesModal extends Modal {
       this.resultsEl.empty();
       this.resultsEl.createEl("p", { text: "Searching…" });
 
-      const omdb = new OmdbClient(
-        this.plugin.settings.omdbApiKey,
-        this.plugin.settings.omdbCache,
-        async (c) => {
-          this.plugin.settings.omdbCache = c;
-          await this.plugin.saveSettings();
-        },
-        obsidianOmdbFetcher,
-      );
-
-      const results = await omdb.searchTitles(title, "series");
-      this.renderResults(results, omdb);
+      const tmdb = this.newClient();
+      const results = await tmdb.searchTitles(title, "series");
+      this.renderResults(results, tmdb);
     };
 
     searchBtn.addEventListener("click", () => void runSearch());
@@ -83,31 +86,23 @@ export class AddSeriesModal extends Modal {
       }
       idBtn.disabled = true;
       idBtn.textContent = "Adding…";
-      const omdb = new OmdbClient(
-        this.plugin.settings.omdbApiKey,
-        this.plugin.settings.omdbCache,
-        async (c) => {
-          this.plugin.settings.omdbCache = c;
-          await this.plugin.saveSettings();
-        },
-        obsidianOmdbFetcher,
-      );
+      const tmdb = this.newClient();
       try {
-        const info = await omdb.getSeries(imdbId);
+        const info = await tmdb.getDetailsByImdbId(imdbId);
         if (!info || !info.title) {
           throw new Error(`no series found for ${imdbId}`);
         }
         if (info.type && info.type !== "series") {
           throw new Error(`${imdbId} is a ${info.type}, not a series`);
         }
-        const result: OmdbSearchResult = {
+        const result: TmdbSearchResult = {
           title: info.title,
           year: info.year,
-          imdbId,
+          tmdbId: info.tmdbId,
           poster: info.poster,
         };
         idBtn.textContent = "Fetching seasons…";
-        await this.createSeriesNote(result, omdb);
+        await this.createSeriesNote(result, tmdb);
         new Notice(`Added "${result.title}"`);
         this.onAdded();
         this.close();
@@ -125,7 +120,7 @@ export class AddSeriesModal extends Modal {
     });
   }
 
-  private renderResults(results: OmdbSearchResult[], omdb: OmdbClient): void {
+  private renderResults(results: TmdbSearchResult[], tmdb: TmdbClient): void {
     this.resultsEl.empty();
     if (results.length === 0) {
       this.resultsEl.createEl("p", { text: "No results." });
@@ -145,7 +140,7 @@ export class AddSeriesModal extends Modal {
         addBtn.textContent = "Adding…";
         try {
           addBtn.textContent = "Fetching seasons…";
-          await this.createSeriesNote(r, omdb);
+          await this.createSeriesNote(r, tmdb);
           new Notice(`Added "${r.title}"`);
           this.onAdded();
           this.close();
@@ -160,32 +155,33 @@ export class AddSeriesModal extends Modal {
     }
   }
 
-  private async createSeriesNote(result: OmdbSearchResult, omdb: OmdbClient): Promise<void> {
+  private async createSeriesNote(result: TmdbSearchResult, tmdb: TmdbClient): Promise<void> {
     const folder = this.plugin.settings.seriesFolder;
     if (!(await this.app.vault.adapter.exists(folder))) {
       await this.app.vault.createFolder(folder);
     }
 
-    const info = await omdb.getSeries(result.imdbId);
+    const info = await tmdb.getDetails(result.tmdbId, "series");
     const genres = info?.genre
       ? info.genre.split(",").map((g) => `"${g.trim()}"`).join(", ")
       : "";
     const image = info?.poster || result.poster || "";
     const totalSeasons = info?.totalSeasons ?? 0;
+    const imdbId = info?.imdbId ?? "";
 
     // Fetch every season. If the series-level lookup (for the season count)
     // failed or returned 0, don't silently assume "1 season" — probe
-    // sequentially instead, stopping once OMDb stops returning episodes.
-    const seasonEntries: { number: number; data: Awaited<ReturnType<typeof omdb.getSeason>> }[] = [];
+    // sequentially instead, stopping once TMDb stops returning episodes.
+    const seasonEntries: { number: number; data: Awaited<ReturnType<typeof tmdb.getSeason>> }[] = [];
     if (totalSeasons > 0) {
       const capped = Math.min(totalSeasons, MAX_SEASONS_ON_ADD);
       const fetched = await Promise.all(
-        Array.from({ length: capped }, (_, i) => i + 1).map((n) => omdb.getSeason(result.imdbId, n)),
+        Array.from({ length: capped }, (_, i) => i + 1).map((n) => tmdb.getSeason(result.tmdbId, n)),
       );
       fetched.forEach((data, i) => seasonEntries.push({ number: i + 1, data }));
     } else {
       for (let n = 1; n <= MAX_SEASONS_ON_ADD; n++) {
-        const data = await omdb.getSeason(result.imdbId, n);
+        const data = await tmdb.getSeason(result.tmdbId, n);
         if (!data || data.episodes.length === 0) break;
         seasonEntries.push({ number: n, data });
       }
@@ -204,8 +200,9 @@ export class AddSeriesModal extends Modal {
       })
       .join("\n");
 
-    const fileName = sanitizeFileName(`${result.title} (${result.year.replace(/[–-]$/, "")})`);
+    const fileName = sanitizeFileName(`${result.title} (${result.year})`);
     const path = normalizePath(`${folder}/${fileName}.md`);
+    const sourceUrl = imdbId ? `https://www.imdb.com/title/${imdbId}/` : "";
 
     const content = `---
 type: series
@@ -214,7 +211,7 @@ status: want-to-watch
 rating: null
 total_seasons: ${totalSeasons || "null"}
 source: manual
-source_url: "https://www.imdb.com/title/${result.imdbId}/"
+source_url: "${sourceUrl}"
 tags: [${genres}]
 date_added: ${todayIso()}
 date_completed: ""

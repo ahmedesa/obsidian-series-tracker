@@ -3,20 +3,20 @@ import { SeriesTrackerSettingTab } from "./SettingsTab";
 import { DashboardView, VIEW_TYPE_DASHBOARD } from "./DashboardView";
 import { MoviesView, VIEW_TYPE_MOVIES } from "./MoviesView";
 import { asString, extractImdbId, normalizeFolderPath } from "./SeriesParser";
-import { CacheEntry } from "./OmdbClient";
+import { CacheEntry } from "./TmdbClient";
 
 export interface SeriesTrackerSettings {
-  omdbApiKey: string;
+  tmdbApiKey: string;
   seriesFolder: string;
   moviesFolder: string;
-  omdbCache: Record<string, CacheEntry>;
+  tmdbCache: Record<string, CacheEntry>;
 }
 
 export const DEFAULT_SETTINGS: SeriesTrackerSettings = {
-  omdbApiKey: "",
+  tmdbApiKey: "",
   seriesFolder: "Media/Series",
   moviesFolder: "Media/Movies",
-  omdbCache: {},
+  tmdbCache: {},
 };
 
 export default class SeriesTrackerPlugin extends Plugin {
@@ -71,8 +71,8 @@ export default class SeriesTrackerPlugin extends Plugin {
 
   /**
    * IMDb ids for every series/movie note currently in the vault, across
-   * both configured folders. Series and movies share one OMDb cache
-   * (settings.omdbCache), so pruning it correctly requires knowing every
+   * both configured folders. Series and movies share one TMDb cache
+   * (settings.tmdbCache), so pruning it correctly requires knowing every
    * live id — not just the ones the calling view happens to track.
    */
   getAllLiveImdbIds(): Set<string> {

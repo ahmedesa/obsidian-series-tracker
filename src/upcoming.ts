@@ -1,6 +1,6 @@
 /**
  * Pure logic for the dashboard's "Next Up" spotlight and "Upcoming" list.
- * Consumes a flat list of unwatched episodes (already merged with OMDb
+ * Consumes a flat list of unwatched episodes (already merged with TMDb
  * air-date data by the caller) and picks/groups them — no Obsidian or
  * network dependency, so it's fully unit-testable.
  */
@@ -14,7 +14,7 @@ export interface UpcomingEpisode {
   season: number;
   episode: number;
   title: string;
-  /** OMDb's `Released` field, `YYYY-MM-DD` (or "N/A"/empty if unknown). */
+  /** TMDb's `Released` field, `YYYY-MM-DD` (or "N/A"/empty if unknown). */
   released: string;
   lineIndex: number;
 }

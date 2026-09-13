@@ -41,7 +41,7 @@ export const MANUAL_ONLY_STATUS = "abandoned";
 
 export interface EpisodeAirInfo {
   watched: boolean;
-  /** OMDb `Released` date (`YYYY-MM-DD`), or null/unknown if not fetched yet. */
+  /** TMDb `Released` date (`YYYY-MM-DD`), or null/unknown if not fetched yet. */
   released: string | null;
 }
 
@@ -139,7 +139,7 @@ export function parseSeriesBody(body: string): Season[] {
   return seasons;
 }
 
-export interface OmdbSeasonEpisodes {
+export interface TmdbSeasonEpisodes {
   number: number;
   episodes: { episode: number; title: string }[];
 }
@@ -151,13 +151,13 @@ export interface MergeResult {
 }
 
 /**
- * Merges freshly-fetched OMDb season/episode data into an existing note
+ * Merges freshly-fetched TMDb season/episode data into an existing note
  * body: appends any episode not already present (by number) to its
  * season's block, and appends a brand-new `## Season N` block for any
  * season not already present. Never touches existing lines — watched
  * state and watched dates on already-tracked episodes are untouched.
  */
-export function mergeNewEpisodes(body: string, seasonsData: OmdbSeasonEpisodes[]): MergeResult {
+export function mergeNewEpisodes(body: string, seasonsData: TmdbSeasonEpisodes[]): MergeResult {
   const lines = body.split("\n");
   let episodesAdded = 0;
   let seasonsAdded = 0;
@@ -250,7 +250,7 @@ export function extractImdbId(sourceUrl: string): string | null {
  * Parses a bare IMDb id (`tt1234567`) or a full IMDb title URL (with or
  * without trailing slash/query string) into just the id. Returns null for
  * anything that doesn't contain a `tt<digits>` id. Used by the "Add by
- * IMDb ID/URL" fallback when OMDb's title search misses non-English titles.
+ * IMDb ID/URL" fallback when TMDb's title search misses non-English titles.
  */
 export function parseImdbId(input: string): string | null {
   const m = input.trim().match(/(tt\d+)/);

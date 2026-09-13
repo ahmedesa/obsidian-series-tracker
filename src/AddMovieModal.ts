@@ -1,15 +1,15 @@
 import { App, Modal, Notice, normalizePath, requestUrl } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
-import { OmdbClient, OmdbFetcher, OmdbSearchResult } from "./OmdbClient";
+import { TmdbClient, TmdbFetcher, TmdbSearchResult } from "./TmdbClient";
 import { todayIso } from "./dateUtil";
 import { parseImdbId } from "./MovieParser";
 
-const obsidianOmdbFetcher: OmdbFetcher = async (url) => {
+const obsidianTmdbFetcher: TmdbFetcher = async (url) => {
   const res = await requestUrl({ url });
   return { json: res.json };
 };
 
-/** Modal: search OMDb by title, pick a result, create a movie note for it. */
+/** Modal: search TMDb by title, pick a result, create a movie note for it. */
 export class AddMovieModal extends Modal {
   private plugin: SeriesTrackerPlugin;
   private onAdded: () => void;
@@ -19,6 +19,18 @@ export class AddMovieModal extends Modal {
     super(app);
     this.plugin = plugin;
     this.onAdded = onAdded;
+  }
+
+  private newClient(): TmdbClient {
+    return new TmdbClient(
+      this.plugin.settings.tmdbApiKey,
+      this.plugin.settings.tmdbCache,
+      async (c) => {
+        this.plugin.settings.tmdbCache = c;
+        await this.plugin.saveSettings();
+      },
+      obsidianTmdbFetcher,
+    );
   }
 
   onOpen(): void {
@@ -41,18 +53,9 @@ export class AddMovieModal extends Modal {
       this.resultsEl.empty();
       this.resultsEl.createEl("p", { text: "Searching…" });
 
-      const omdb = new OmdbClient(
-        this.plugin.settings.omdbApiKey,
-        this.plugin.settings.omdbCache,
-        async (c) => {
-          this.plugin.settings.omdbCache = c;
-          await this.plugin.saveSettings();
-        },
-        obsidianOmdbFetcher,
-      );
-
-      const results = await omdb.searchTitles(title, "movie");
-      this.renderResults(results, omdb);
+      const tmdb = this.newClient();
+      const results = await tmdb.searchTitles(title, "movie");
+      this.renderResults(results, tmdb);
     };
 
     searchBtn.addEventListener("click", () => void runSearch());
@@ -80,30 +83,22 @@ export class AddMovieModal extends Modal {
       }
       idBtn.disabled = true;
       idBtn.textContent = "Adding…";
-      const omdb = new OmdbClient(
-        this.plugin.settings.omdbApiKey,
-        this.plugin.settings.omdbCache,
-        async (c) => {
-          this.plugin.settings.omdbCache = c;
-          await this.plugin.saveSettings();
-        },
-        obsidianOmdbFetcher,
-      );
+      const tmdb = this.newClient();
       try {
-        const info = await omdb.getSeries(imdbId);
+        const info = await tmdb.getDetailsByImdbId(imdbId);
         if (!info || !info.title) {
           throw new Error(`no movie found for ${imdbId}`);
         }
         if (info.type && info.type !== "movie") {
           throw new Error(`${imdbId} is a ${info.type}, not a movie`);
         }
-        const result: OmdbSearchResult = {
+        const result: TmdbSearchResult = {
           title: info.title,
           year: info.year,
-          imdbId,
+          tmdbId: info.tmdbId,
           poster: info.poster,
         };
-        await this.createMovieNote(result, omdb);
+        await this.createMovieNote(result, tmdb);
         new Notice(`Added "${result.title}"`);
         this.onAdded();
         this.close();
@@ -121,7 +116,7 @@ export class AddMovieModal extends Modal {
     });
   }
 
-  private renderResults(results: OmdbSearchResult[], omdb: OmdbClient): void {
+  private renderResults(results: TmdbSearchResult[], tmdb: TmdbClient): void {
     this.resultsEl.empty();
     if (results.length === 0) {
       this.resultsEl.createEl("p", { text: "No results." });
@@ -140,7 +135,7 @@ export class AddMovieModal extends Modal {
         addBtn.disabled = true;
         addBtn.textContent = "Adding…";
         try {
-          await this.createMovieNote(r, omdb);
+          await this.createMovieNote(r, tmdb);
           new Notice(`Added "${r.title}"`);
           this.onAdded();
           this.close();
@@ -155,27 +150,29 @@ export class AddMovieModal extends Modal {
     }
   }
 
-  private async createMovieNote(result: OmdbSearchResult, omdb: OmdbClient): Promise<void> {
+  private async createMovieNote(result: TmdbSearchResult, tmdb: TmdbClient): Promise<void> {
     const folder = this.plugin.settings.moviesFolder;
     if (!(await this.app.vault.adapter.exists(folder))) {
       await this.app.vault.createFolder(folder);
     }
 
-    const info = await omdb.getSeries(result.imdbId);
+    const info = await tmdb.getDetails(result.tmdbId, "movie");
     const genres = info?.genre
       ? info.genre.split(",").map((g) => `"${g.trim()}"`).join(", ")
       : "";
     const image = info?.poster || result.poster || "";
+    const imdbId = info?.imdbId ?? "";
 
     const fileName = sanitizeFileName(`${result.title} ${result.year}`);
     const path = normalizePath(`${folder}/${fileName}.md`);
+    const sourceUrl = imdbId ? `https://www.imdb.com/title/${imdbId}/` : "";
 
     const content = `---
 type: movie
 title: "${escapeYamlString(result.title)}"
 status: want-to-watch
 source: manual
-source_url: "https://www.imdb.com/title/${result.imdbId}/"
+source_url: "${sourceUrl}"
 genre: [${genres}]
 language: ""
 favourite: false

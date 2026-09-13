@@ -8,7 +8,7 @@ export function todayIso(): string {
 }
 
 /**
- * Parses an OMDb `YYYY-MM-DD` date as local midnight rather than UTC
+ * Parses an TMDb `YYYY-MM-DD` date as local midnight rather than UTC
  * midnight — `new Date("2026-09-16")` parses as UTC, which shifts the
  * effective local date by one day in negative-UTC-offset timezones.
  * Returns null for missing/unparsable/`"N/A"` input.

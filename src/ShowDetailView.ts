@@ -17,11 +17,11 @@ import {
   SeriesFrontmatter,
 } from "./SeriesParser";
 import { todayIso, isAired } from "./dateUtil";
-import { OmdbClient, OmdbFetcher } from "./OmdbClient";
+import { TmdbClient, TmdbFetcher } from "./TmdbClient";
 import { ConfirmModal } from "./ConfirmModal";
 
-/** Routes OMDb requests through Obsidian's CORS-safe requestUrl API. */
-const obsidianOmdbFetcher: OmdbFetcher = async (url) => {
+/** Routes TMDb requests through Obsidian's CORS-safe requestUrl API. */
+const obsidianTmdbFetcher: TmdbFetcher = async (url) => {
   const res = await requestUrl({ url });
   return { json: res.json };
 };
@@ -85,7 +85,7 @@ export async function renderShowDetail(
 
     // Air-date lookups for auto-status, keyed "seasonNumber:episodeNumber".
     // Populated once the season fetches below resolve; `seriesEnded` comes
-    // from the series-level OMDb lookup a little further down.
+    // from the series-level TMDb lookup a little further down.
     const episodeAirDates = new Map<string, string>();
     let seriesEndedFlag: boolean | undefined;
 
@@ -118,10 +118,10 @@ export async function renderShowDetail(
 
     const imdbId = extractImdbId(fm.source_url);
 
-    // Refresh — force-refetch OMDb data (bypassing the 24h cache) and merge
+    // Refresh — force-refetch TMDb data (bypassing the 24h cache) and merge
     // any newly-aired seasons/episodes into the note. Existing checkbox
     // state and watched dates are never touched.
-    const refreshBtn = container.createEl("button", { cls: "st-refresh-btn", text: "↻ Refresh from OMDb" });
+    const refreshBtn = container.createEl("button", { cls: "st-refresh-btn", text: "↻ Refresh from TMDb" });
     const handleRefresh = async () => {
       // Re-derive from a fresh read rather than trusting the outer `fm`/
       // `imdbId` closures — those came from metadataCache.getFileCache() at
@@ -140,21 +140,21 @@ export async function renderShowDetail(
       refreshBtn.disabled = true;
       refreshBtn.textContent = "Refreshing…";
       try {
-        const freshOmdb = new OmdbClient(
-          plugin.settings.omdbApiKey,
-          plugin.settings.omdbCache,
+        const freshTmdb = new TmdbClient(
+          plugin.settings.tmdbApiKey,
+          plugin.settings.tmdbCache,
           async (c) => {
-            plugin.settings.omdbCache = c;
+            plugin.settings.tmdbCache = c;
             await plugin.saveSettings();
           },
-          obsidianOmdbFetcher,
+          obsidianTmdbFetcher,
         );
-        const freshInfo = await freshOmdb.getSeries(liveImdbId, true);
+        const freshInfo = await freshTmdb.getDetailsByImdbId(liveImdbId, true);
         const seasonCount = Math.min(freshInfo?.totalSeasons || seasons.length || 1, 25);
 
         const fetched = await Promise.all(
           Array.from({ length: seasonCount }, (_, i) => i + 1).map(async (n) => {
-            const data = await freshOmdb.getSeason(liveImdbId, n, true);
+            const data = await freshTmdb.getSeasonByImdbId(liveImdbId, n, true);
             return data ? { number: n, data } : null;
           }),
         );
@@ -198,25 +198,25 @@ export async function renderShowDetail(
         new Notice(`Series Tracker: refresh failed — ${errorMessage(err)}`);
       } finally {
         refreshBtn.disabled = false;
-        refreshBtn.textContent = "↻ Refresh from OMDb";
+        refreshBtn.textContent = "↻ Refresh from TMDb";
       }
     };
     refreshBtn.addEventListener("click", () => void handleRefresh());
 
-    const omdb = new OmdbClient(
-      plugin.settings.omdbApiKey,
-      plugin.settings.omdbCache,
+    const tmdb = new TmdbClient(
+      plugin.settings.tmdbApiKey,
+      plugin.settings.tmdbCache,
       async (c) => {
-        plugin.settings.omdbCache = c;
+        plugin.settings.tmdbCache = c;
         await plugin.saveSettings();
       },
-      obsidianOmdbFetcher,
+      obsidianTmdbFetcher,
     );
 
     // Series-level info panel (plot/rated/runtime/country/awards/rating) —
     // fetched and rendered before the episode lists, but never blocks them.
     if (imdbId) {
-      const info = await omdb.getSeries(imdbId);
+      const info = await tmdb.getDetailsByImdbId(imdbId);
       if (!isCurrent()) return;
       seriesEndedFlag = info?.seriesEnded;
       if (info) {
@@ -227,7 +227,7 @@ export async function renderShowDetail(
           ["Rated", info.rated],
           ["Runtime", info.runtime],
           ["Country", info.country],
-          ["IMDb rating", info.imdbRating],
+          ["TMDb rating", info.imdbRating],
           ["Awards", info.awards],
         ];
         for (const [label, value] of fields) {
@@ -239,7 +239,7 @@ export async function renderShowDetail(
       }
     }
 
-    // Render immediately from local data; OMDb air-date badges are patched
+    // Render immediately from local data; TMDb air-date badges are patched
     // in once (parallel) fetches resolve, below.
     const rowsByKey: Record<string, HTMLElement> = {};
 
@@ -348,7 +348,7 @@ export async function renderShowDetail(
 
     const seasonResults = await Promise.all(
       seasons.map(async (season) => {
-        const data = await omdb.getSeason(imdbId, season.number);
+        const data = await tmdb.getSeasonByImdbId(imdbId, season.number);
         return { number: season.number, data };
       }),
     );
@@ -360,10 +360,10 @@ export async function renderShowDetail(
       const season = seasons.find((s) => s.number === number);
       if (!season) continue;
       for (const ep of season.episodes) {
-        const omdbEp = data.episodes.find((e) => e.episode === ep.number);
-        if (!omdbEp || !omdbEp.released) continue;
-        episodeAirDates.set(`${number}:${ep.number}`, omdbEp.released);
-        if (isAired(omdbEp.released) && !ep.watched) {
+        const tmdbEp = data.episodes.find((e) => e.episode === ep.number);
+        if (!tmdbEp || !tmdbEp.released) continue;
+        episodeAirDates.set(`${number}:${ep.number}`, tmdbEp.released);
+        if (isAired(tmdbEp.released) && !ep.watched) {
           const row = rowsByKey[`${number}:${ep.number}`];
           row?.createSpan({ cls: "st-badge-pending", text: " aired, unwatched" });
         }
@@ -371,7 +371,7 @@ export async function renderShowDetail(
     }
 
     // Now that air dates are known, get the status current for this open —
-    // covers the case where OMDb data changed (e.g. a new episode aired)
+    // covers the case where TMDb data changed (e.g. a new episode aired)
     // since the last time this note was touched, without requiring an
     // explicit interaction first.
     await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag);

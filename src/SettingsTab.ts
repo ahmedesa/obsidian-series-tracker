@@ -14,13 +14,15 @@ export class SeriesTrackerSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     new Setting(containerEl)
-      .setName("OMDb API key")
-      .setDesc("Used to fetch season episode lists and air dates. Leave blank to use local checkbox data only.")
+      .setName("TMDb API key")
+      .setDesc(
+        "Used to fetch season episode lists, air dates, and search results (including non-English titles). Get a free key at themoviedb.org/settings/api. Leave blank to use local checkbox data only.",
+      )
       .addText((text) =>
         text
-          .setValue(this.plugin.settings.omdbApiKey)
+          .setValue(this.plugin.settings.tmdbApiKey)
           .onChange(async (value) => {
-            this.plugin.settings.omdbApiKey = value.trim();
+            this.plugin.settings.tmdbApiKey = value.trim();
             await this.plugin.saveSettings();
           }),
       );

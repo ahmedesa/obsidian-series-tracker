@@ -14,15 +14,15 @@ import {
   movieStatusLabel,
 } from "./MovieParser";
 import { AddMovieModal } from "./AddMovieModal";
-import { OmdbClient, OmdbFetcher } from "./OmdbClient";
+import { TmdbClient, TmdbFetcher } from "./TmdbClient";
 import { todayIso } from "./dateUtil";
 import { ConfirmModal } from "./ConfirmModal";
 import { pruneOmdbCache } from "./cachePrune";
 
 export const VIEW_TYPE_MOVIES = "series-tracker-movies";
 
-/** Routes OMDb requests through Obsidian's CORS-safe requestUrl API. */
-const obsidianOmdbFetcher: OmdbFetcher = async (url) => {
+/** Routes TMDb requests through Obsidian's CORS-safe requestUrl API. */
+const obsidianTmdbFetcher: TmdbFetcher = async (url) => {
   const res = await requestUrl({ url });
   return { json: res.json };
 };
@@ -135,7 +135,7 @@ export class MoviesView extends ItemView {
       return;
     }
 
-    // Fire-and-forget: drop OMDb cache entries for shows/movies no longer
+    // Fire-and-forget: drop TMDb cache entries for shows/movies no longer
     // tracked. Never awaited — must not delay or race the render below.
     void this.pruneCache();
 
@@ -232,18 +232,18 @@ export class MoviesView extends ItemView {
   }
 
   /**
-   * Drops OMDb cache entries for shows/movies no longer tracked in the
+   * Drops TMDb cache entries for shows/movies no longer tracked in the
    * vault. Fire-and-forget: only saves settings when something changed.
    */
   private async pruneCache(): Promise<void> {
     try {
       const liveImdbIds = this.plugin.getAllLiveImdbIds();
-      const { pruned, removedCount } = pruneOmdbCache(this.plugin.settings.omdbCache, liveImdbIds);
+      const { pruned, removedCount } = pruneOmdbCache(this.plugin.settings.tmdbCache, liveImdbIds);
       if (removedCount === 0) return;
-      this.plugin.settings.omdbCache = pruned;
+      this.plugin.settings.tmdbCache = pruned;
       await this.plugin.saveSettings();
     } catch (err) {
-      console.error("Series Tracker: failed to prune OMDb cache", err);
+      console.error("Series Tracker: failed to prune TMDb cache", err);
     }
   }
 
@@ -379,16 +379,16 @@ export class MoviesView extends ItemView {
       const imdbId = extractImdbId(fm.source_url);
 
       if (imdbId) {
-        const omdb = new OmdbClient(
-          this.plugin.settings.omdbApiKey,
-          this.plugin.settings.omdbCache,
+        const tmdb = new TmdbClient(
+          this.plugin.settings.tmdbApiKey,
+          this.plugin.settings.tmdbCache,
           async (c) => {
-            this.plugin.settings.omdbCache = c;
+            this.plugin.settings.tmdbCache = c;
             await this.plugin.saveSettings();
           },
-          obsidianOmdbFetcher,
+          obsidianTmdbFetcher,
         );
-        const info = await omdb.getSeries(imdbId);
+        const info = await tmdb.getDetailsByImdbId(imdbId);
         if (!isCurrent()) return;
         if (info) {
           const panel = container.createDiv({ cls: "st-info-panel" });
@@ -398,7 +398,7 @@ export class MoviesView extends ItemView {
             ["Rated", info.rated],
             ["Runtime", info.runtime],
             ["Genre", info.genre],
-            ["IMDb rating", info.imdbRating],
+            ["TMDb rating", info.imdbRating],
             ["Awards", info.awards],
           ];
           for (const [label, value] of fields) {

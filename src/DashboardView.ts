@@ -13,7 +13,7 @@ import {
 } from "./SeriesParser";
 import { renderShowDetail } from "./ShowDetailView";
 import { AddSeriesModal } from "./AddSeriesModal";
-import { OmdbClient, OmdbFetcher, parseRuntimeMinutes } from "./OmdbClient";
+import { TmdbClient, TmdbFetcher, parseRuntimeMinutes } from "./TmdbClient";
 import { todayIso } from "./dateUtil";
 import { UpcomingEpisode, findNextUp, findUpcoming, groupUpcomingByDate } from "./upcoming";
 import { findRecentlyWatched } from "./recentlyWatched";
@@ -21,8 +21,8 @@ import { pruneOmdbCache } from "./cachePrune";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
 
-/** Routes OMDb requests through Obsidian's CORS-safe requestUrl API. */
-const obsidianOmdbFetcher: OmdbFetcher = async (url) => {
+/** Routes TMDb requests through Obsidian's CORS-safe requestUrl API. */
+const obsidianTmdbFetcher: TmdbFetcher = async (url) => {
   const res = await requestUrl({ url });
   return { json: res.json };
 };
@@ -136,7 +136,7 @@ export class DashboardView extends ItemView {
       return;
     }
 
-    // Fire-and-forget: drop OMDb cache entries for shows no longer tracked.
+    // Fire-and-forget: drop TMDb cache entries for shows no longer tracked.
     // Never awaited/blocking — a stale cache entry costs nothing but disk
     // space, so this must not delay or race the render above it.
     void this.pruneCache();
@@ -191,7 +191,7 @@ export class DashboardView extends ItemView {
       new AddSeriesModal(this.app, this.plugin, () => void this.render()).open();
     });
 
-    // Placeholder now; populated once the async OMDb air-date fetch below
+    // Placeholder now; populated once the async TMDb air-date fetch below
     // resolves. Reflects ALL tracked shows, independent of the filter/status
     // controls above (those only affect the grid).
     const nextUpContainer = container.createDiv({ cls: "st-nextup-container" });
@@ -229,7 +229,7 @@ export class DashboardView extends ItemView {
     tile3.createDiv({ cls: "st-tile-label", text: this.filterStatus || this.filterText ? "Shows matching" : "Shows tracked" });
 
     // Placeholder now; populated once loadTimeSpent (below) resolves — it
-    // needs a per-show OMDb runtime lookup, so it can't be computed here
+    // needs a per-show TMDb runtime lookup, so it can't be computed here
     // synchronously without blocking the rest of the dashboard.
     const tile4 = stats.createDiv({ cls: "st-tile" });
     const tile4Value = tile4.createDiv({ cls: "st-tile-value", text: "—" });
@@ -289,7 +289,7 @@ export class DashboardView extends ItemView {
         console.error("Series Tracker: failed to load upcoming episodes", err);
       });
 
-    // Time spent watching — needs a per-show OMDb runtime lookup (cached,
+    // Time spent watching — needs a per-show TMDb runtime lookup (cached,
     // same as everything else), so it's fetched separately and patched into
     // the placeholder tile once it resolves. Independent of the Next Up/
     // Upcoming fetch above so one slow show doesn't hold up the other.
@@ -304,36 +304,36 @@ export class DashboardView extends ItemView {
   }
 
   /**
-   * Drops OMDb cache entries for shows no longer tracked in the vault.
+   * Drops TMDb cache entries for shows no longer tracked in the vault.
    * Fire-and-forget: never awaited by the caller, and only saves settings
    * when something was actually removed.
    */
   private async pruneCache(): Promise<void> {
     try {
       const liveImdbIds = this.plugin.getAllLiveImdbIds();
-      const { pruned, removedCount } = pruneOmdbCache(this.plugin.settings.omdbCache, liveImdbIds);
+      const { pruned, removedCount } = pruneOmdbCache(this.plugin.settings.tmdbCache, liveImdbIds);
       if (removedCount === 0) return;
-      this.plugin.settings.omdbCache = pruned;
+      this.plugin.settings.tmdbCache = pruned;
       await this.plugin.saveSettings();
     } catch (err) {
-      console.error("Series Tracker: failed to prune OMDb cache", err);
+      console.error("Series Tracker: failed to prune TMDb cache", err);
     }
   }
 
   /**
-   * Sum of (watched episodes × the show's OMDb runtime-in-minutes) across
+   * Sum of (watched episodes × the show's TMDb runtime-in-minutes) across
    * every tracked show with a resolvable IMDb id. Shows with no runtime
    * data (missing/unparsable) contribute 0, not an error.
    */
   private async loadTimeSpentMinutes(all: { file: TFile; parsed: ParsedSeries }[]): Promise<number> {
-    const omdb = new OmdbClient(
-      this.plugin.settings.omdbApiKey,
-      this.plugin.settings.omdbCache,
+    const tmdb = new TmdbClient(
+      this.plugin.settings.tmdbApiKey,
+      this.plugin.settings.tmdbCache,
       async (c) => {
-        this.plugin.settings.omdbCache = c;
+        this.plugin.settings.tmdbCache = c;
         await this.plugin.saveSettings();
       },
-      obsidianOmdbFetcher,
+      obsidianTmdbFetcher,
     );
 
     const perShowMinutes = await Promise.all(
@@ -342,7 +342,7 @@ export class DashboardView extends ItemView {
         if (watched === 0) return 0;
         const imdbId = extractImdbId(parsed.frontmatter.source_url);
         if (!imdbId) return 0;
-        const info = await omdb.getSeries(imdbId);
+        const info = await tmdb.getDetailsByImdbId(imdbId);
         return watched * parseRuntimeMinutes(info?.runtime);
       }),
     );
@@ -373,22 +373,22 @@ export class DashboardView extends ItemView {
   }
 
   /**
-   * Fetches OMDb season data (respecting the normal 24h cache) for every
+   * Fetches TMDb season data (respecting the normal 24h cache) for every
    * season that still has an unwatched episode, across every tracked show
    * with a resolvable IMDb id. Returns one UpcomingEpisode per unwatched
-   * episode that OMDb has a release date for.
+   * episode that TMDb has a release date for.
    */
   private async loadUpcomingCandidates(
     all: { file: TFile; parsed: ParsedSeries }[],
   ): Promise<UpcomingEpisode[]> {
-    const omdb = new OmdbClient(
-      this.plugin.settings.omdbApiKey,
-      this.plugin.settings.omdbCache,
+    const tmdb = new TmdbClient(
+      this.plugin.settings.tmdbApiKey,
+      this.plugin.settings.tmdbCache,
       async (c) => {
-        this.plugin.settings.omdbCache = c;
+        this.plugin.settings.tmdbCache = c;
         await this.plugin.saveSettings();
       },
-      obsidianOmdbFetcher,
+      obsidianTmdbFetcher,
     );
 
     const candidates: UpcomingEpisode[] = [];
@@ -401,20 +401,20 @@ export class DashboardView extends ItemView {
         const unwatched = season.episodes.filter((e) => !e.watched);
         if (unwatched.length === 0) continue;
 
-        const data = await omdb.getSeason(imdbId, season.number);
+        const data = await tmdb.getSeasonByImdbId(imdbId, season.number);
         if (!data) continue;
 
         for (const ep of unwatched) {
-          const omdbEp = data.episodes.find((e) => e.episode === ep.number);
-          if (!omdbEp || !omdbEp.released || omdbEp.released === "N/A") continue;
+          const tmdbEp = data.episodes.find((e) => e.episode === ep.number);
+          if (!tmdbEp || !tmdbEp.released || tmdbEp.released === "N/A") continue;
           candidates.push({
             showTitle: parsed.frontmatter.title,
             showImage: parsed.frontmatter.image,
             filePath: file.path,
             season: season.number,
             episode: ep.number,
-            title: omdbEp.title,
-            released: omdbEp.released,
+            title: tmdbEp.title,
+            released: tmdbEp.released,
             lineIndex: ep.lineIndex,
           });
         }
