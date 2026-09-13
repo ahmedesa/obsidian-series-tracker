@@ -1,0 +1,9 @@
+{
+  "id": "series-tracker",
+  "name": "Series Tracker",
+  "version": "0.1.0",
+  "minAppVersion": "1.7.0",
+  "description": "Dashboard and episode tracker for TV series notes.",
+  "author": "Ahmed Essa",
+  "isDesktopOnly": false
+}
