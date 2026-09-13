@@ -50,5 +50,17 @@ export class SeriesTrackerSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }),
       );
+
+    new Setting(containerEl)
+      .setName("Streaming country")
+      .setDesc("Country code for streaming availability (e.g. US, GB, DE).")
+      .addText((text) =>
+        text
+          .setValue(this.plugin.settings.streamingCountry)
+          .onChange(async (value) => {
+            this.plugin.settings.streamingCountry = value.trim().toUpperCase() || "US";
+            await this.plugin.saveSettings();
+          }),
+      );
   }
 }

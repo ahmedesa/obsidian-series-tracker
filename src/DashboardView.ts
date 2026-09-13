@@ -10,11 +10,12 @@ import {
   ParsedSeries,
   STATUS_OPTIONS,
   statusLabel,
+  extractDistinctGenres,
 } from "./SeriesParser";
 import { renderShowDetail } from "./ShowDetailView";
 import { AddSeriesModal } from "./AddSeriesModal";
 import { TmdbClient, TmdbFetcher, parseRuntimeMinutes } from "./TmdbClient";
-import { todayIso } from "./dateUtil";
+import { todayIso, formatDurationMinutes } from "./dateUtil";
 import { UpcomingEpisode, findNextUp, findUpcoming, groupUpcomingByDate } from "./upcoming";
 import { findRecentlyWatched } from "./recentlyWatched";
 import { pruneOmdbCache } from "./cachePrune";
@@ -36,6 +37,7 @@ export class DashboardView extends ItemView {
   // Dashboard filter state — in-memory only, resets on view close.
   private filterText = "";
   private filterStatus: string | null = null;
+  private filterGenre: string | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: SeriesTrackerPlugin) {
     super(leaf);
@@ -186,6 +188,20 @@ export class DashboardView extends ItemView {
       statusMenu.toggle(statusMenuOpen);
     });
 
+    // Genre filter — options built from genres actually present on tracked
+    // shows, not a hardcoded TMDb list.
+    const genres = extractDistinctGenres(all.map(({ parsed }) => parsed.frontmatter.tags));
+    const genreSelect = header.createEl("select", { cls: "st-genre-filter" });
+    genreSelect.createEl("option", { value: "", text: "All genres" });
+    for (const g of genres) {
+      genreSelect.createEl("option", { value: g, text: g });
+    }
+    genreSelect.value = this.filterGenre ?? "";
+    genreSelect.addEventListener("change", () => {
+      this.filterGenre = genreSelect.value || null;
+      void this.render();
+    });
+
     const addBtn = header.createEl("button", { cls: "st-add-series", text: "+ Add series" });
     addBtn.addEventListener("click", () => {
       new AddSeriesModal(this.app, this.plugin, () => void this.render()).open();
@@ -198,6 +214,7 @@ export class DashboardView extends ItemView {
 
     const filtered = all.filter(({ parsed }) => {
       if (this.filterStatus && parsed.frontmatter.status !== this.filterStatus) return false;
+      if (this.filterGenre && !parsed.frontmatter.tags.includes(this.filterGenre)) return false;
       if (this.filterText.trim() && !parsed.frontmatter.title.toLowerCase().includes(this.filterText.trim().toLowerCase())) {
         return false;
       }
@@ -226,7 +243,10 @@ export class DashboardView extends ItemView {
 
     const tile3 = stats.createDiv({ cls: "st-tile" });
     tile3.createDiv({ cls: "st-tile-value", text: `${filtered.length}` });
-    tile3.createDiv({ cls: "st-tile-label", text: this.filterStatus || this.filterText ? "Shows matching" : "Shows tracked" });
+    tile3.createDiv({
+      cls: "st-tile-label",
+      text: this.filterStatus || this.filterGenre || this.filterText ? "Shows matching" : "Shows tracked",
+    });
 
     // Placeholder now; populated once loadTimeSpent (below) resolves — it
     // needs a per-show TMDb runtime lookup, so it can't be computed here
@@ -234,6 +254,16 @@ export class DashboardView extends ItemView {
     const tile4 = stats.createDiv({ cls: "st-tile" });
     const tile4Value = tile4.createDiv({ cls: "st-tile-value", text: "—" });
     tile4.createDiv({ cls: "st-tile-label", text: "Time spent watching" });
+
+    const providersTmdb = new TmdbClient(
+      this.plugin.settings.tmdbApiKey,
+      this.plugin.settings.tmdbCache,
+      async (c) => {
+        this.plugin.settings.tmdbCache = c;
+        await this.plugin.saveSettings();
+      },
+      obsidianTmdbFetcher,
+    );
 
     const grid = container.createDiv({ cls: "st-grid" });
     for (const { file, parsed } of filtered) {
@@ -252,6 +282,25 @@ export class DashboardView extends ItemView {
         this.currentFile = file;
         void this.render();
       });
+
+      // Streaming provider badges — patched in once the (cached) fetch
+      // resolves, so a slow lookup never delays the card's own render.
+      const imdbId = extractImdbId(parsed.frontmatter.source_url);
+      if (imdbId) {
+        const badges = card.createDiv({ cls: "st-card-providers" });
+        providersTmdb
+          .getWatchProvidersByImdbId(imdbId, this.plugin.settings.streamingCountry)
+          .then((providers) => {
+            if (generation !== this.renderGeneration) return;
+            for (const p of providers.slice(0, 4)) {
+              if (!p.logo) continue;
+              badges.createEl("img", { cls: "st-provider-badge", attr: { src: p.logo, title: p.name } });
+            }
+          })
+          .catch((err) => {
+            console.error("Series Tracker: failed to load watch providers", err);
+          });
+      }
     }
 
     if (all.length === 0) {
@@ -517,16 +566,4 @@ export class DashboardView extends ItemView {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-/** e.g. 90 -> "1h 30m", 1500 -> "1d 1h", 45 -> "45m". */
-function formatDurationMinutes(totalMinutes: number): string {
-  if (totalMinutes <= 0) return "0m";
-  const days = Math.floor(totalMinutes / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = totalMinutes % 60;
-
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  return `${minutes}m`;
 }

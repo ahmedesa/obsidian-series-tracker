@@ -1,12 +1,15 @@
 /**
- * OMDb cache entries are keyed `<imdbId>:series` or `<imdbId>:<season>`
- * (see OmdbClient's cacheKey/getSeries). Given the set of IMDb ids still
- * tracked in the vault, returns which cache keys to keep — everything else
- * belongs to a show/movie the user has since deleted.
+ * TMDb cache entries are keyed `<imdbId>:series`, `<imdbId>:<season>`,
+ * `<imdbId>:resolve`, or `<imdbId>:providers:<country>` (see TmdbClient).
+ * IMDb ids never contain a colon, so the first colon always delimits the
+ * id — use indexOf, not lastIndexOf, or multi-colon keys (providers) mis-key.
+ * Given the set of IMDb ids still tracked in the vault, returns which cache
+ * keys to keep — everything else belongs to a show/movie the user has since
+ * deleted.
  */
 export function computeCacheKeysToKeep(cacheKeys: string[], liveImdbIds: Set<string>): string[] {
   return cacheKeys.filter((key) => {
-    const idx = key.lastIndexOf(":");
+    const idx = key.indexOf(":");
     const imdbId = idx === -1 ? key : key.slice(0, idx);
     return liveImdbIds.has(imdbId);
   });

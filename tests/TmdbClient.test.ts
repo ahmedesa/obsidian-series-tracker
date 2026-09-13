@@ -329,3 +329,52 @@ describe("TmdbClient.getSeasonByImdbId", () => {
     expect(await client.getSeasonByImdbId("tt1375666", 1)).toBeNull();
   });
 });
+
+describe("TmdbClient.getWatchProviders", () => {
+  it("maps flatrate providers for the requested country", async () => {
+    const { client } = newClient((url) => {
+      expect(url).toContain("/tv/1396/watch/providers");
+      return {
+        results: {
+          US: { flatrate: [{ provider_name: "Netflix", logo_path: "/netflix.jpg" }] },
+          GB: { flatrate: [{ provider_name: "BBC iPlayer", logo_path: "/bbc.jpg" }] },
+        },
+      };
+    });
+    const providers = await client.getWatchProviders(1396, "series", "US");
+    expect(providers).toEqual([{ name: "Netflix", logo: "https://image.tmdb.org/t/p/w92/netflix.jpg" }]);
+  });
+
+  it("returns [] when the country has no flatrate entries", async () => {
+    const { client } = newClient(() => ({ results: { US: {} } }));
+    expect(await client.getWatchProviders(1396, "series", "US")).toEqual([]);
+  });
+
+  it("uppercases the country code before lookup", async () => {
+    const { client } = newClient(() => ({ results: { US: { flatrate: [{ provider_name: "Netflix", logo_path: "/n.jpg" }] } } }));
+    expect(await client.getWatchProviders(1396, "series", "us")).toHaveLength(1);
+  });
+});
+
+describe("TmdbClient.getWatchProvidersByImdbId", () => {
+  it("resolves then fetches providers, caching under <imdbId>:providers:<country>", async () => {
+    const { client, cache } = newClient((url) => {
+      if (url.includes("/find/")) return { tv_results: [{ id: 1396 }], movie_results: [] };
+      return { results: { US: { flatrate: [{ provider_name: "Netflix", logo_path: "/n.jpg" }] } } };
+    });
+    const providers = await client.getWatchProvidersByImdbId("tt0903747", "US");
+    expect(providers).toEqual([{ name: "Netflix", logo: "https://image.tmdb.org/t/p/w92/n.jpg" }]);
+    expect(cache["tt0903747:providers:US"]).toBeDefined();
+  });
+
+  it("serves from cache within TTL without re-resolving", async () => {
+    const findFetcher = vi.fn(async () => ({ json: { tv_results: [{ id: 1396 }], movie_results: [] } }));
+    const cache: Record<string, CacheEntry> = {
+      "tt0903747:providers:US": { fetchedAt: Date.now(), data: [{ name: "Netflix", logo: "x" }] },
+    };
+    const client = new TmdbClient("test-key", cache, vi.fn(), findFetcher);
+    const providers = await client.getWatchProvidersByImdbId("tt0903747", "US");
+    expect(providers).toEqual([{ name: "Netflix", logo: "x" }]);
+    expect(findFetcher).not.toHaveBeenCalled();
+  });
+});

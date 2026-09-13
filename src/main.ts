@@ -10,6 +10,7 @@ export interface SeriesTrackerSettings {
   seriesFolder: string;
   moviesFolder: string;
   tmdbCache: Record<string, CacheEntry>;
+  streamingCountry: string;
 }
 
 export const DEFAULT_SETTINGS: SeriesTrackerSettings = {
@@ -17,6 +18,7 @@ export const DEFAULT_SETTINGS: SeriesTrackerSettings = {
   seriesFolder: "Media/Series",
   moviesFolder: "Media/Movies",
   tmdbCache: {},
+  streamingCountry: "US",
 };
 
 export default class SeriesTrackerPlugin extends Plugin {

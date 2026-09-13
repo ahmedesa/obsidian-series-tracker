@@ -22,6 +22,12 @@ describe("computeCacheKeysToKeep", () => {
   it("returns empty when live set is empty", () => {
     expect(computeCacheKeysToKeep(["tt001:series"], new Set())).toEqual([]);
   });
+
+  it("keeps multi-colon provider keys for live IMDb ids (imdbId never contains a colon)", () => {
+    const keys = ["tt001:providers:US", "tt001:providers:GB", "tt999:providers:US"];
+    const kept = computeCacheKeysToKeep(keys, new Set(["tt001"]));
+    expect(kept.sort()).toEqual(["tt001:providers:GB", "tt001:providers:US"]);
+  });
 });
 
 describe("pruneOmdbCache", () => {

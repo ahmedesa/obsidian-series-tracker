@@ -33,6 +33,11 @@ export interface TmdbSeriesInfo {
   tmdbId: number;
 }
 
+export interface TmdbWatchProvider {
+  name: string;
+  logo: string;
+}
+
 export interface TmdbSearchResult {
   tmdbId: number;
   title: string;
@@ -59,11 +64,17 @@ interface ResolveCacheEntry {
   data: { tmdbId: number; mediaType: "series" | "movie" };
 }
 
-export type CacheEntry = DetailsCacheEntry | SeasonCacheEntry | ResolveCacheEntry;
+interface ProvidersCacheEntry {
+  fetchedAt: number;
+  data: TmdbWatchProvider[];
+}
+
+export type CacheEntry = DetailsCacheEntry | SeasonCacheEntry | ResolveCacheEntry | ProvidersCacheEntry;
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const TMDB_API_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
+const TMDB_LOGO_BASE = "https://image.tmdb.org/t/p/w92";
 
 /** TMDb tv `status`: "Ended"/"Canceled" mean no more episodes are coming. Exported for testing. */
 export function isSeriesEnded(status: string | undefined | null): boolean {
@@ -83,6 +94,10 @@ function formatRuntime(minutes: number | undefined | null): string {
 
 function posterUrl(path: string | null | undefined): string {
   return path ? `${TMDB_IMAGE_BASE}${path}` : "";
+}
+
+function logoUrl(path: string | null | undefined): string {
+  return path ? `${TMDB_LOGO_BASE}${path}` : "";
 }
 
 function formatVote(vote: number | undefined | null): string {
@@ -160,6 +175,19 @@ interface TmdbRawSeasonResponse {
 interface TmdbRawFindResponse {
   movie_results?: TmdbRawSearchMovieEntry[];
   tv_results?: TmdbRawSearchTvEntry[];
+}
+
+interface TmdbRawProviderEntry {
+  provider_name?: string;
+  logo_path?: string | null;
+}
+
+interface TmdbRawCountryProviders {
+  flatrate?: TmdbRawProviderEntry[];
+}
+
+interface TmdbRawWatchProvidersResponse {
+  results?: Record<string, TmdbRawCountryProviders>;
 }
 
 /**
@@ -303,6 +331,25 @@ export class TmdbClient {
     }
   }
 
+  /** Fetches streaming (subscription) providers for a known TMDb id + country. Not cached — see class doc. */
+  async getWatchProviders(
+    tmdbId: number,
+    mediaType: "series" | "movie",
+    country: string,
+  ): Promise<TmdbWatchProvider[]> {
+    if (!this.apiKey) return [];
+    const path = mediaType === "series" ? "tv" : "movie";
+    try {
+      const url = `${TMDB_API_BASE}/${path}/${tmdbId}/watch/providers?api_key=${this.apiKey}`;
+      const { json } = await this.fetcher(url);
+      const raw = json as TmdbRawWatchProvidersResponse;
+      const entries = raw.results?.[country.toUpperCase()]?.flatrate ?? [];
+      return entries.map((p) => ({ name: p.provider_name ?? "", logo: logoUrl(p.logo_path) }));
+    } catch {
+      return [];
+    }
+  }
+
   /**
    * Resolves a stored IMDb id to its TMDb id + media type, via
    * `find/{imdb_id}`. Cached permanently under `<imdbId>:resolve` — this
@@ -368,6 +415,23 @@ export class TmdbClient {
     const data = await this.getSeason(resolved.tmdbId, season);
     if (!data) return (cached as SeasonCacheEntry | undefined)?.data ?? null;
 
+    this.cache[key] = { fetchedAt: Date.now(), data };
+    await this.saveCache(this.cache);
+    return data;
+  }
+
+  /** Cached (24h), imdbId-based watch-providers lookup — the dashboard hot path. */
+  async getWatchProvidersByImdbId(imdbId: string, country: string): Promise<TmdbWatchProvider[]> {
+    const key = `${imdbId}:providers:${country.toUpperCase()}`;
+    const cached = this.cache[key];
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+      return (cached as ProvidersCacheEntry).data;
+    }
+
+    const resolved = await this.resolveFromImdbId(imdbId);
+    if (!resolved) return (cached as ProvidersCacheEntry | undefined)?.data ?? [];
+
+    const data = await this.getWatchProviders(resolved.tmdbId, resolved.mediaType, country);
     this.cache[key] = { fetchedAt: Date.now(), data };
     await this.saveCache(this.cache);
     return data;

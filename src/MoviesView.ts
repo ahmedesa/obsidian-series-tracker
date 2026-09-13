@@ -12,10 +12,12 @@ import {
   normalizeFolderPath,
   MOVIE_STATUS_OPTIONS,
   movieStatusLabel,
+  RATING_OPTIONS,
+  extractDistinctGenres,
 } from "./MovieParser";
 import { AddMovieModal } from "./AddMovieModal";
-import { TmdbClient, TmdbFetcher } from "./TmdbClient";
-import { todayIso } from "./dateUtil";
+import { TmdbClient, TmdbFetcher, parseRuntimeMinutes } from "./TmdbClient";
+import { todayIso, formatDurationMinutes } from "./dateUtil";
 import { ConfirmModal } from "./ConfirmModal";
 import { pruneOmdbCache } from "./cachePrune";
 
@@ -38,6 +40,7 @@ export class MoviesView extends ItemView {
   private renderGeneration = 0;
   private filterText = "";
   private filterStatus: string | null = null;
+  private filterGenre: string | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: SeriesTrackerPlugin) {
     super(leaf);
@@ -181,6 +184,18 @@ export class MoviesView extends ItemView {
       statusMenu.toggle(statusMenuOpen);
     });
 
+    const genres = extractDistinctGenres(all.map(({ parsed }) => parsed.frontmatter.genre));
+    const genreSelect = header.createEl("select", { cls: "st-genre-filter" });
+    genreSelect.createEl("option", { value: "", text: "All genres" });
+    for (const g of genres) {
+      genreSelect.createEl("option", { value: g, text: g });
+    }
+    genreSelect.value = this.filterGenre ?? "";
+    genreSelect.addEventListener("change", () => {
+      this.filterGenre = genreSelect.value || null;
+      void this.render();
+    });
+
     const addBtn = header.createEl("button", { cls: "st-add-series", text: "+ Add movie" });
     addBtn.addEventListener("click", () => {
       new AddMovieModal(this.app, this.plugin, () => void this.render()).open();
@@ -188,6 +203,7 @@ export class MoviesView extends ItemView {
 
     const filtered = all.filter(({ parsed }) => {
       if (this.filterStatus && parsed.frontmatter.status !== this.filterStatus) return false;
+      if (this.filterGenre && !parsed.frontmatter.genre.includes(this.filterGenre)) return false;
       if (this.filterText.trim() && !parsed.frontmatter.title.toLowerCase().includes(this.filterText.trim().toLowerCase())) {
         return false;
       }
@@ -208,7 +224,27 @@ export class MoviesView extends ItemView {
 
     const tile3 = stats.createDiv({ cls: "st-tile" });
     tile3.createDiv({ cls: "st-tile-value", text: `${filtered.length}` });
-    tile3.createDiv({ cls: "st-tile-label", text: this.filterStatus || this.filterText ? "Movies matching" : "Movies tracked" });
+    tile3.createDiv({
+      cls: "st-tile-label",
+      text: this.filterStatus || this.filterGenre || this.filterText ? "Movies matching" : "Movies tracked",
+    });
+
+    // Placeholder now; populated once loadTimeSpentMinutes (below) resolves
+    // — needs a per-movie TMDb runtime lookup, same pattern as the series
+    // dashboard's "Time spent watching" tile.
+    const tile4 = stats.createDiv({ cls: "st-tile" });
+    const tile4Value = tile4.createDiv({ cls: "st-tile-value", text: "—" });
+    tile4.createDiv({ cls: "st-tile-label", text: "Time spent watching" });
+
+    const providersTmdb = new TmdbClient(
+      this.plugin.settings.tmdbApiKey,
+      this.plugin.settings.tmdbCache,
+      async (c) => {
+        this.plugin.settings.tmdbCache = c;
+        await this.plugin.saveSettings();
+      },
+      obsidianTmdbFetcher,
+    );
 
     const grid = container.createDiv({ cls: "st-grid" });
     for (const { file, parsed } of filtered) {
@@ -222,6 +258,25 @@ export class MoviesView extends ItemView {
         this.currentFile = file;
         void this.render();
       });
+
+      // Streaming provider badges — patched in once the (cached) fetch
+      // resolves, so a slow lookup never delays the card's own render.
+      const imdbId = extractImdbId(parsed.frontmatter.source_url);
+      if (imdbId) {
+        const badges = card.createDiv({ cls: "st-card-providers" });
+        providersTmdb
+          .getWatchProvidersByImdbId(imdbId, this.plugin.settings.streamingCountry)
+          .then((providers) => {
+            if (generation !== this.renderGeneration) return;
+            for (const p of providers.slice(0, 4)) {
+              if (!p.logo) continue;
+              badges.createEl("img", { cls: "st-provider-badge", attr: { src: p.logo, title: p.name } });
+            }
+          })
+          .catch((err) => {
+            console.error("Series Tracker: failed to load watch providers", err);
+          });
+      }
     }
 
     if (all.length === 0) {
@@ -229,6 +284,47 @@ export class MoviesView extends ItemView {
     } else if (filtered.length === 0) {
       grid.createEl("p", { cls: "st-empty-state", text: "No movies match the current filter." });
     }
+
+    // Time spent watching — needs a per-movie TMDb runtime lookup (cached,
+    // same as everything else), fetched separately so it never blocks the
+    // rest of the dashboard, which has already rendered above.
+    this.loadTimeSpentMinutes(filtered)
+      .then((minutes) => {
+        if (generation !== this.renderGeneration) return;
+        tile4Value.setText(formatDurationMinutes(minutes));
+      })
+      .catch((err) => {
+        console.error("Series Tracker: failed to compute time spent watching", err);
+      });
+  }
+
+  /**
+   * Sum of TMDb runtime-in-minutes across every tracked movie marked
+   * "watched" with a resolvable IMDb id. Movies with no runtime data
+   * (missing/unparsable) contribute 0, not an error.
+   */
+  private async loadTimeSpentMinutes(movies: { file: TFile; parsed: ParsedMovie }[]): Promise<number> {
+    const tmdb = new TmdbClient(
+      this.plugin.settings.tmdbApiKey,
+      this.plugin.settings.tmdbCache,
+      async (c) => {
+        this.plugin.settings.tmdbCache = c;
+        await this.plugin.saveSettings();
+      },
+      obsidianTmdbFetcher,
+    );
+
+    const perMovieMinutes = await Promise.all(
+      movies.map(async ({ parsed }) => {
+        if (parsed.frontmatter.status !== "watched") return 0;
+        const imdbId = extractImdbId(parsed.frontmatter.source_url);
+        if (!imdbId) return 0;
+        const info = await tmdb.getDetailsByImdbId(imdbId);
+        return parseRuntimeMinutes(info?.runtime);
+      }),
+    );
+
+    return perMovieMinutes.reduce((sum, m) => sum + m, 0);
   }
 
   /**
@@ -329,17 +425,17 @@ export class MoviesView extends ItemView {
       };
       statusSelect.addEventListener("change", () => void handleStatusChange());
 
-      // Personal rating — dropdown 0-5 (plus "Unrated").
+      // Personal rating — dropdown 0-5 in 0.5 steps (plus "Unrated").
       const ratingRow = container.createDiv({ cls: "st-rating-row" });
       ratingRow.createSpan({ text: "Your rating: " });
       const ratingSelect = ratingRow.createEl("select", { cls: "st-rating-select" });
       ratingSelect.createEl("option", { value: "", text: "Unrated" });
-      for (let i = 0; i <= 5; i++) {
-        ratingSelect.createEl("option", { value: String(i), text: String(i) });
+      for (const r of RATING_OPTIONS) {
+        ratingSelect.createEl("option", { value: String(r), text: String(r) });
       }
       ratingSelect.value = fm.rating !== null ? String(fm.rating) : "";
       const handleRatingChange = async () => {
-        const next = ratingSelect.value === "" ? null : parseInt(ratingSelect.value, 10);
+        const next = ratingSelect.value === "" ? null : parseFloat(ratingSelect.value);
         const previous = fm.rating;
         try {
           await this.app.vault.process(file, (data) => {
