@@ -458,7 +458,9 @@ export class MoviesView extends ItemView {
       const cache = this.app.metadataCache.getFileCache(file);
       const fm = parseMovieFrontmatter((cache?.frontmatter) ?? {});
 
-      container.createEl("h2", { text: fm.title });
+      const titleRow = container.createDiv({ cls: "st-title-row" });
+      titleRow.createEl("h2", { text: fm.title });
+      const yearEl = titleRow.createSpan({ cls: "st-title-year" });
 
       if (fm.image) {
         container.createEl("img", { cls: "st-detail-poster", attr: { src: fm.image } });
@@ -611,6 +613,9 @@ export class MoviesView extends ItemView {
         const tmdb = this.newProvider();
         const info = await tmdb.getDetailsByExternalId(imdbId);
         if (!isCurrent()) return;
+        if (info?.year) {
+          yearEl.setText(`(${info.year})`);
+        }
         if (info) {
           const panel = container.createDiv({ cls: "st-info-panel" });
           if (info.plot) panel.createEl("p", { cls: "st-info-plot", text: info.plot });
