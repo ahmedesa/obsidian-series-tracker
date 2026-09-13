@@ -11,6 +11,7 @@ import {
   getNotesSection,
   setNotesSection,
   mergeNewEpisodes,
+  deriveStatus,
 } from "../src/SeriesParser";
 
 describe("parseSeriesBody", () => {
@@ -232,6 +233,50 @@ describe("mergeNewEpisodes", () => {
     expect(result.episodesAdded).toBe(0);
     expect(result.seasonsAdded).toBe(0);
     expect(result.body).toBe(body);
+  });
+});
+
+describe("deriveStatus", () => {
+  const airedByDefault = (_released: string | null) => true;
+  const nothingAired = (_released: string | null) => false;
+
+  it("returns want-to-watch when nothing has been watched", () => {
+    expect(deriveStatus([{ watched: false, released: "2024-01-01" }], false, airedByDefault)).toBe("want-to-watch");
+  });
+
+  it("returns want-to-watch for a show with no episodes at all", () => {
+    expect(deriveStatus([], false, airedByDefault)).toBe("want-to-watch");
+  });
+
+  it("returns watching when an aired episode is unwatched", () => {
+    const episodes = [
+      { watched: true, released: "2024-01-01" },
+      { watched: false, released: "2024-01-08" },
+    ];
+    expect(deriveStatus(episodes, false, airedByDefault)).toBe("watching");
+  });
+
+  it("returns up-to-date when all aired episodes are watched but the show is still airing", () => {
+    const episodes = [
+      { watched: true, released: "2024-01-01" },
+      { watched: false, released: "2099-01-01" }, // not aired yet
+    ];
+    const isAired = (released: string | null) => released === "2024-01-01";
+    expect(deriveStatus(episodes, false, isAired)).toBe("up-to-date");
+  });
+
+  it("returns finished when all aired episodes are watched and the show has ended", () => {
+    const episodes = [{ watched: true, released: "2024-01-01" }];
+    expect(deriveStatus(episodes, true, airedByDefault)).toBe("finished");
+  });
+
+  it("returns watching (not up-to-date) when the aired set is empty, even with a watched episode", () => {
+    // An empty aired set can't confirm "caught up" — deriveStatus
+    // deliberately treats "no known aired episodes" as Pending rather than
+    // vacuously Up to date, since allAiredWatched requires a non-empty
+    // aired set to be true.
+    const episodes = [{ watched: true, released: "2024-01-01" }];
+    expect(deriveStatus(episodes, false, nothingAired)).toBe("watching");
   });
 });
 

@@ -6,3 +6,21 @@ export function todayIso(): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * Parses an OMDb `YYYY-MM-DD` date as local midnight rather than UTC
+ * midnight — `new Date("2026-09-16")` parses as UTC, which shifts the
+ * effective local date by one day in negative-UTC-offset timezones.
+ * Returns null for missing/unparsable/`"N/A"` input.
+ */
+export function parseLocalDate(released: string | null | undefined): number | null {
+  if (!released || released === "N/A") return null;
+  const t = new Date(`${released}T00:00:00`).getTime();
+  return isNaN(t) ? null : t;
+}
+
+/** True if `released` parses to a date at or before `now`. */
+export function isAired(released: string | null | undefined, now: number = Date.now()): boolean {
+  const t = parseLocalDate(released);
+  return t !== null && t <= now;
+}

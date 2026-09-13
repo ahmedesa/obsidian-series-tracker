@@ -5,6 +5,8 @@
  * network dependency, so it's fully unit-testable.
  */
 
+import { parseLocalDate } from "./dateUtil";
+
 export interface UpcomingEpisode {
   showTitle: string;
   showImage: string;
@@ -22,17 +24,6 @@ const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-
-/**
- * Parses an OMDb `YYYY-MM-DD` date as local midnight rather than UTC
- * midnight — `new Date("2026-09-16")` parses as UTC, which shifts the
- * effective local date by one day in negative-UTC-offset timezones.
- */
-function parseLocalDate(released: string): number | null {
-  if (!released || released === "N/A") return null;
-  const t = new Date(`${released}T00:00:00`).getTime();
-  return isNaN(t) ? null : t;
-}
 
 /** The oldest aired-but-unwatched episode across all shows, or null if none. */
 export function findNextUp(candidates: UpcomingEpisode[], now: number = Date.now()): UpcomingEpisode | null {

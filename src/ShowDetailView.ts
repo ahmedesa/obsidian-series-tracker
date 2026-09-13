@@ -11,9 +11,12 @@ import {
   getNotesSection,
   setNotesSection,
   mergeNewEpisodes,
+  deriveStatus,
+  MANUAL_ONLY_STATUS,
   STATUS_OPTIONS,
+  SeriesFrontmatter,
 } from "./SeriesParser";
-import { todayIso } from "./dateUtil";
+import { todayIso, isAired } from "./dateUtil";
 import { OmdbClient, OmdbFetcher } from "./OmdbClient";
 
 /** Routes OMDb requests through Obsidian's CORS-safe requestUrl API. */
@@ -41,7 +44,11 @@ export async function renderShowDetail(
 
     container.createEl("h2", { text: fm.title });
 
-    // Status — same 5 options as the dashboard's status filter.
+    // Status — same 5 options as the dashboard's status filter. Wishlist/
+    // Pending/Up to date/Completed are auto-managed (see autoUpdateStatus
+    // below, called after every watch-state write); this dropdown is for
+    // manually overriding — mainly to set Abandoned, which nothing else
+    // ever touches once set.
     const statusRow = container.createDiv({ cls: "st-status-row" });
     statusRow.createSpan({ text: "Status: " });
     const statusSelect = statusRow.createEl("select", { cls: "st-status-select" });
@@ -49,6 +56,10 @@ export async function renderShowDetail(
       statusSelect.createEl("option", { value: opt.value, text: opt.label });
     }
     statusSelect.value = fm.status;
+    statusRow.createSpan({
+      cls: "st-status-hint",
+      text: " (auto-managed unless set to Abandoned)",
+    });
     statusSelect.addEventListener("change", async () => {
       const next = statusSelect.value;
       const previous = fm.status;
@@ -64,6 +75,12 @@ export async function renderShowDetail(
         new Notice(`Series Tracker: failed to save status — ${errorMessage(err)}`);
       }
     });
+
+    // Air-date lookups for auto-status, keyed "seasonNumber:episodeNumber".
+    // Populated once the season fetches below resolve; `seriesEnded` comes
+    // from the series-level OMDb lookup a little further down.
+    const episodeAirDates = new Map<string, string>();
+    let seriesEndedFlag: boolean | undefined;
 
     // Personal rating — dropdown 0-5 (plus "Unrated"), written back to the
     // `rating` frontmatter field (mirrors the Movies notes' rating convention).
@@ -120,10 +137,23 @@ export async function renderShowDetail(
         const fetched = await Promise.all(
           Array.from({ length: seasonCount }, (_, i) => i + 1).map(async (n) => {
             const data = await freshOmdb.getSeason(imdbId, n, true);
-            return data ? { number: n, episodes: data.episodes.map((e) => ({ episode: e.episode, title: e.title })) } : null;
+            return data ? { number: n, data } : null;
           }),
         );
-        const seasonsData = fetched.filter((s): s is NonNullable<typeof s> => s !== null);
+        const seasonsWithData = fetched.filter((s): s is { number: number; data: NonNullable<typeof fetched[number]>["data"] } => s !== null);
+        const seasonsData = seasonsWithData.map((s) => ({
+          number: s.number,
+          episodes: s.data.episodes.map((e) => ({ episode: e.episode, title: e.title })),
+        }));
+
+        // Refresh the air-date map too, so the post-merge status recompute
+        // below reflects any newly-discovered episodes' release dates.
+        for (const { number, data } of seasonsWithData) {
+          for (const ep of data.episodes) {
+            if (ep.released) episodeAirDates.set(`${number}:${ep.episode}`, ep.released);
+          }
+        }
+        seriesEndedFlag = freshInfo?.seriesEnded;
 
         let merged = { episodesAdded: 0, seasonsAdded: 0 };
         await app.vault.process(file, (data) => {
@@ -144,6 +174,7 @@ export async function renderShowDetail(
           new Notice("Series Tracker: no new episodes.");
         }
         onChange();
+        await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag);
       } catch (err) {
         console.error("Series Tracker: refresh failed", err);
         new Notice(`Series Tracker: refresh failed — ${errorMessage(err)}`);
@@ -168,6 +199,7 @@ export async function renderShowDetail(
     if (imdbId) {
       const info = await omdb.getSeries(imdbId);
       if (!isCurrent()) return;
+      seriesEndedFlag = info?.seriesEnded;
       if (info) {
         const panel = container.createDiv({ cls: "st-info-panel" });
         if (info.plot) panel.createEl("p", { cls: "st-info-plot", text: info.plot });
@@ -216,6 +248,7 @@ export async function renderShowDetail(
           const stamp = checkbox.checked ? todayIso() : null;
           await writeEpisodeState(app, file, ep.lineIndex, checkbox.checked, stamp, checkbox, onChange);
           dateSpan.setText(checkbox.checked && stamp ? ` (watched ${stamp})` : "");
+          await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag);
         });
       }
 
@@ -233,6 +266,7 @@ export async function renderShowDetail(
           });
           for (const cb of checkboxes) cb.checked = true;
           onChange();
+          await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag);
         } catch (err) {
           console.error("Series Tracker: failed to mark season watched", err);
           new Notice(`Series Tracker: failed to mark season watched — ${errorMessage(err)}`);
@@ -281,14 +315,19 @@ export async function renderShowDetail(
       for (const ep of season.episodes) {
         const omdbEp = data.episodes.find((e) => e.episode === ep.number);
         if (!omdbEp || !omdbEp.released) continue;
-        const released = new Date(omdbEp.released);
-        const aired = !isNaN(released.getTime()) && released.getTime() <= Date.now();
-        if (aired && !ep.watched) {
+        episodeAirDates.set(`${number}:${ep.number}`, omdbEp.released);
+        if (isAired(omdbEp.released) && !ep.watched) {
           const row = rowsByKey[`${number}:${ep.number}`];
           row?.createSpan({ cls: "st-badge-pending", text: " aired, unwatched" });
         }
       }
     }
+
+    // Now that air dates are known, get the status current for this open —
+    // covers the case where OMDb data changed (e.g. a new episode aired)
+    // since the last time this note was touched, without requiring an
+    // explicit interaction first.
+    await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag);
   } catch (err) {
     console.error("Series Tracker: failed to render show detail", err);
     if (isCurrent()) {
@@ -318,6 +357,49 @@ async function writeEpisodeState(
     checkbox.checked = !desired;
     console.error("Series Tracker: failed to write episode state", err);
     new Notice(`Series Tracker: failed to update episode — ${errorMessage(err)}`);
+  }
+}
+
+/**
+ * Recomputes the show's auto-managed status from current watch state and
+ * writes it if it changed. Never overrides MANUAL_ONLY_STATUS ("abandoned")
+ * — that's a deliberate user call nothing else should touch. Failures are
+ * logged but non-fatal: this runs as a side-effect after other writes that
+ * already succeeded, so it shouldn't surface as a user-facing error for
+ * what is, from the user's perspective, a background sync.
+ */
+async function autoUpdateStatus(
+  app: App,
+  file: TFile,
+  fm: SeriesFrontmatter,
+  statusSelect: HTMLSelectElement,
+  episodeAirDates: Map<string, string>,
+  seriesEnded: boolean | undefined,
+): Promise<void> {
+  if (fm.status === MANUAL_ONLY_STATUS) return;
+
+  try {
+    let newStatus: string | null = null;
+    await app.vault.process(file, (data) => {
+      const live = splitFrontmatter(data);
+      const liveSeasons = parseSeriesBody(live.body);
+      const allEpisodes = liveSeasons.flatMap((s) =>
+        s.episodes.map((e) => ({
+          watched: e.watched,
+          released: episodeAirDates.get(`${s.number}:${e.number}`) ?? null,
+        })),
+      );
+      const derived = deriveStatus(allEpisodes, seriesEnded ?? false, (released) => isAired(released));
+      if (derived === fm.status) return data;
+      newStatus = derived;
+      return setFrontmatterStringField(live.frontmatterBlock, "status", derived) + live.body;
+    });
+    if (newStatus) {
+      fm.status = newStatus;
+      statusSelect.value = newStatus;
+    }
+  } catch (err) {
+    console.error("Series Tracker: failed to auto-update status", err);
   }
 }
 

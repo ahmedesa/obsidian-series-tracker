@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { OmdbClient } from "../src/OmdbClient";
+import { OmdbClient, isSeriesEnded } from "../src/OmdbClient";
 
 describe("OmdbClient", () => {
   beforeEach(() => {
@@ -60,6 +60,7 @@ describe("OmdbClient", () => {
       Genre: "Action, Comedy, Crime",
       Poster: "https://example.com/poster.jpg",
       totalSeasons: "3",
+      Year: "2011–2019",
     };
     global.fetch = vi.fn().mockResolvedValue({ json: async () => mockResponse }) as any;
 
@@ -79,6 +80,7 @@ describe("OmdbClient", () => {
       genre: "Action, Comedy, Crime",
       poster: "https://example.com/poster.jpg",
       totalSeasons: 3,
+      seriesEnded: true,
     });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect((fetch as any).mock.calls[0][0]).not.toContain("Season=");
@@ -109,5 +111,29 @@ describe("OmdbClient", () => {
     const results = await client.searchSeries("Severance");
     expect(results).toEqual([]);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("isSeriesEnded", () => {
+  it("treats a trailing en-dash with no closing year as ongoing", () => {
+    expect(isSeriesEnded("2024–")).toBe(false);
+  });
+
+  it("treats a trailing hyphen with no closing year as ongoing", () => {
+    expect(isSeriesEnded("2024-")).toBe(false);
+  });
+
+  it("treats a closed year range as ended", () => {
+    expect(isSeriesEnded("2011–2019")).toBe(true);
+  });
+
+  it("treats a single year (no dash) as ended", () => {
+    expect(isSeriesEnded("2020")).toBe(true);
+  });
+
+  it("treats a missing/empty Year as not ended", () => {
+    expect(isSeriesEnded("")).toBe(false);
+    expect(isSeriesEnded(undefined)).toBe(false);
+    expect(isSeriesEnded(null)).toBe(false);
   });
 });

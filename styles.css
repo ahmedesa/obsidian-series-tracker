@@ -183,6 +183,10 @@
 .st-status-select {
   padding: 2px 6px;
 }
+.st-status-hint {
+  color: var(--text-faint);
+  font-size: 0.8em;
+}
 .st-modal-search-row {
   display: flex;
   gap: 8px;

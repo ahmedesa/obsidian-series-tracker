@@ -20,6 +20,18 @@ export interface OmdbSeriesInfo {
   genre: string;
   poster: string;
   totalSeasons: number;
+  /** Derived from OMDb's `Year` field: `"2024–"` (ongoing) vs `"2011–2019"` (ended). */
+  seriesEnded: boolean;
+}
+
+/**
+ * OMDb's series `Year` field is `"2011–2019"` for an ended show and
+ * `"2024–"` for one still airing — a trailing dash (hyphen or en-dash)
+ * with no closing year after it. Exported for testing.
+ */
+export function isSeriesEnded(year: string | undefined | null): boolean {
+  if (!year) return false;
+  return !/[-–]\s*$/.test(year.trim());
 }
 
 export interface OmdbSearchResult {
@@ -122,6 +134,7 @@ export class OmdbClient {
         genre: json.Genre ?? "",
         poster: json.Poster && json.Poster !== "N/A" ? json.Poster : "",
         totalSeasons: parseInt(json.totalSeasons, 10) || 0,
+        seriesEnded: isSeriesEnded(json.Year),
       };
       this.cache[key] = { fetchedAt: Date.now(), data };
       await this.saveCache(this.cache);

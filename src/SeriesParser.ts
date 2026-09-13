@@ -35,6 +35,44 @@ export function statusLabel(status: string): string {
   return STATUS_OPTIONS.find((s) => s.value === status)?.label ?? status;
 }
 
+/** The one status value never auto-derived — a deliberate user judgment call. */
+export const MANUAL_ONLY_STATUS = "abandoned";
+
+export interface EpisodeAirInfo {
+  watched: boolean;
+  /** OMDb `Released` date (`YYYY-MM-DD`), or null/unknown if not fetched yet. */
+  released: string | null;
+}
+
+/**
+ * Derives the 4 auto-manageable statuses from watch state:
+ * - want-to-watch (Wishlist): nothing watched yet.
+ * - watching (Pending): at least one aired episode is unwatched.
+ * - up-to-date: every aired episode is watched, but the show is still airing.
+ * - finished (Completed): every aired episode is watched and the show has ended.
+ *
+ * Does not know about "abandoned" — that's a manual-only override the
+ * caller is responsible for preserving (see MANUAL_ONLY_STATUS).
+ *
+ * `isAired` is injected (rather than imported) so this stays a pure,
+ * dependency-free function for testing; callers pass dateUtil's `isAired`.
+ */
+export function deriveStatus(
+  episodes: EpisodeAirInfo[],
+  seriesEnded: boolean,
+  isAired: (released: string | null) => boolean,
+): string {
+  if (episodes.length === 0 || episodes.every((e) => !e.watched)) {
+    return "want-to-watch";
+  }
+
+  const airedEpisodes = episodes.filter((e) => isAired(e.released));
+  const allAiredWatched = airedEpisodes.length > 0 && airedEpisodes.every((e) => e.watched);
+
+  if (!allAiredWatched) return "watching";
+  return seriesEnded ? "finished" : "up-to-date";
+}
+
 export interface ParsedSeries {
   frontmatter: SeriesFrontmatter;
   seasons: Season[];
