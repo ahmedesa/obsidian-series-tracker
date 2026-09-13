@@ -44,21 +44,45 @@ describe("TmdbClient.searchTitles", () => {
     const { client } = newClient((url) => {
       expect(url).toContain("/search/tv");
       expect(url).toContain("query=Breaking%20Bad");
-      return { results: [{ id: 1396, name: "Breaking Bad", first_air_date: "2008-01-20", poster_path: "/abc.jpg" }] };
+      return {
+        results: [
+          {
+            id: 1396,
+            name: "Breaking Bad",
+            first_air_date: "2008-01-20",
+            poster_path: "/abc.jpg",
+            vote_average: 8.9,
+            overview: "A chemistry teacher turns to cooking meth.",
+          },
+        ],
+      };
     });
     const results = await client.searchTitles("Breaking Bad", "series");
     expect(results).toEqual([
-      { tmdbId: 1396, title: "Breaking Bad", year: "2008", poster: "https://image.tmdb.org/t/p/w500/abc.jpg" },
+      {
+        tmdbId: 1396,
+        title: "Breaking Bad",
+        year: "2008",
+        poster: "https://image.tmdb.org/t/p/w500/abc.jpg",
+        rating: "8.9",
+        plot: "A chemistry teacher turns to cooking meth.",
+      },
     ]);
   });
 
   it("searches movie and maps fields", async () => {
     const { client } = newClient((url) => {
       expect(url).toContain("/search/movie");
-      return { results: [{ id: 27205, title: "Inception", release_date: "2010-07-15", poster_path: null }] };
+      return {
+        results: [
+          { id: 27205, title: "Inception", release_date: "2010-07-15", poster_path: null, vote_average: 0, overview: "" },
+        ],
+      };
     });
     const results = await client.searchTitles("Inception", "movie");
-    expect(results).toEqual([{ tmdbId: 27205, title: "Inception", year: "2010", poster: "" }]);
+    expect(results).toEqual([
+      { tmdbId: 27205, title: "Inception", year: "2010", poster: "", rating: "", plot: "" },
+    ]);
   });
 
   it("returns [] with no api key", async () => {

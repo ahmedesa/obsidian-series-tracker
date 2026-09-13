@@ -100,6 +100,8 @@ export class AddSeriesModal extends Modal {
           year: info.year,
           tmdbId: info.tmdbId,
           poster: info.poster,
+          rating: info.imdbRating,
+          plot: info.plot,
         };
         idBtn.textContent = "Fetching seasons…";
         await this.createSeriesNote(result, tmdb);
@@ -132,8 +134,15 @@ export class AddSeriesModal extends Modal {
       if (r.poster) {
         row.createEl("img", { attr: { src: r.poster } });
       }
-      const info = row.createDiv();
-      info.createEl("div", { text: `${r.title} (${r.year})`, cls: "st-modal-result-title" });
+      const info = row.createDiv({ cls: "st-modal-result-info" });
+      const titleRow = info.createDiv({ cls: "st-modal-result-title-row" });
+      titleRow.createEl("span", { text: `${r.title} (${r.year})`, cls: "st-modal-result-title" });
+      if (r.rating) {
+        titleRow.createEl("span", { text: `★ ${r.rating}`, cls: "st-modal-result-rating" });
+      }
+      if (r.plot) {
+        info.createEl("div", { text: truncate(r.plot, 140), cls: "st-modal-result-plot" });
+      }
       const addBtn = row.createEl("button", { text: "Add" });
       const handleAdd = async () => {
         addBtn.disabled = true;
@@ -230,6 +239,10 @@ ${seasonBlocks}
   onClose(): void {
     this.contentEl.empty();
   }
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s;
 }
 
 function sanitizeFileName(name: string): string {

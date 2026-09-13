@@ -38,6 +38,10 @@ export interface TmdbSearchResult {
   title: string;
   year: string;
   poster: string;
+  /** TMDb's own 0-10 vote average, formatted to 1 decimal. "" if unrated. */
+  rating: string;
+  /** Short plot summary, as returned by TMDb's search endpoint. */
+  plot: string;
 }
 
 interface DetailsCacheEntry {
@@ -125,6 +129,8 @@ interface TmdbRawSearchTvEntry {
   name?: string;
   first_air_date?: string;
   poster_path?: string | null;
+  vote_average?: number;
+  overview?: string;
 }
 
 interface TmdbRawSearchMovieEntry {
@@ -132,6 +138,8 @@ interface TmdbRawSearchMovieEntry {
   title?: string;
   release_date?: string;
   poster_path?: string | null;
+  vote_average?: number;
+  overview?: string;
 }
 
 interface TmdbRawSearchResponse<T> {
@@ -202,6 +210,8 @@ export class TmdbClient {
           title: r.name ?? "",
           year: (r.first_air_date ?? "").slice(0, 4),
           poster: posterUrl(r.poster_path),
+          rating: formatVote(r.vote_average),
+          plot: r.overview ?? "",
         }));
       }
       const raw = json as TmdbRawSearchResponse<TmdbRawSearchMovieEntry>;
@@ -210,6 +220,8 @@ export class TmdbClient {
         title: r.title ?? "",
         year: (r.release_date ?? "").slice(0, 4),
         poster: posterUrl(r.poster_path),
+        rating: formatVote(r.vote_average),
+        plot: r.overview ?? "",
       }));
     } catch {
       return [];
