@@ -109,21 +109,34 @@ export class AddSeriesModal extends Modal {
       : "";
     const image = info?.poster || result.poster || "";
     const totalSeasons = info?.totalSeasons ?? 0;
-    const seasonsToFetch = Math.min(totalSeasons, MAX_SEASONS_ON_ADD) || 1;
 
-    const seasonResults = await Promise.all(
-      Array.from({ length: seasonsToFetch }, (_, i) => i + 1).map((n) => omdb.getSeason(result.imdbId, n)),
-    );
+    // Fetch every season. If the series-level lookup (for the season count)
+    // failed or returned 0, don't silently assume "1 season" — probe
+    // sequentially instead, stopping once OMDb stops returning episodes.
+    const seasonEntries: { number: number; data: Awaited<ReturnType<typeof omdb.getSeason>> }[] = [];
+    if (totalSeasons > 0) {
+      const capped = Math.min(totalSeasons, MAX_SEASONS_ON_ADD);
+      const fetched = await Promise.all(
+        Array.from({ length: capped }, (_, i) => i + 1).map((n) => omdb.getSeason(result.imdbId, n)),
+      );
+      fetched.forEach((data, i) => seasonEntries.push({ number: i + 1, data }));
+    } else {
+      for (let n = 1; n <= MAX_SEASONS_ON_ADD; n++) {
+        const data = await omdb.getSeason(result.imdbId, n);
+        if (!data || data.episodes.length === 0) break;
+        seasonEntries.push({ number: n, data });
+      }
+    }
+    if (seasonEntries.length === 0) {
+      seasonEntries.push({ number: 1, data: null });
+    }
 
-    const seasonBlocks = seasonResults
-      .map((season, i) => {
-        const number = i + 1;
-        if (!season || season.episodes.length === 0) {
+    const seasonBlocks = seasonEntries
+      .map(({ number, data }) => {
+        if (!data || data.episodes.length === 0) {
           return `## Season ${number}\n- [ ] E1\n`;
         }
-        const lines = season.episodes
-          .map((ep) => `- [ ] E${ep.episode} — ${ep.title}`)
-          .join("\n");
+        const lines = data.episodes.map((ep) => `- [ ] E${ep.episode} — ${ep.title}`).join("\n");
         return `## Season ${number}\n${lines}\n`;
       })
       .join("\n");

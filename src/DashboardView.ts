@@ -38,6 +38,13 @@ export class DashboardView extends ItemView {
         }
       }),
     );
+    this.registerEvent(
+      this.app.vault.on("create", (file) => {
+        if (file instanceof TFile && this.isRelevantFile(file)) {
+          this.render();
+        }
+      }),
+    );
     await this.render();
   }
 
