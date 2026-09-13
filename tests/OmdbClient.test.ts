@@ -51,6 +51,8 @@ describe("OmdbClient", () => {
   it("fetches and caches series-level info", async () => {
     const mockResponse = {
       Response: "True",
+      Title: "Peaky Blinders",
+      Type: "series",
       Plot: "A synopsis.",
       Rated: "TV-MA",
       Runtime: "45 min",
@@ -71,6 +73,9 @@ describe("OmdbClient", () => {
     const result = await client.getSeries("tt13210838");
 
     expect(result).toEqual({
+      title: "Peaky Blinders",
+      year: "2011–2019",
+      type: "series",
       plot: "A synopsis.",
       rated: "TV-MA",
       runtime: "45 min",

@@ -250,6 +250,11 @@
   flex: 1;
   font-weight: 500;
 }
+.st-modal-id-hint {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  margin: 16px 0 8px;
+}
 .st-nextup-container {
   margin-bottom: 20px;
 }

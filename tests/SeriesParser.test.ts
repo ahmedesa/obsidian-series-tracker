@@ -13,6 +13,7 @@ import {
   mergeNewEpisodes,
   deriveStatus,
   normalizeFolderPath,
+  parseImdbId,
 } from "../src/SeriesParser";
 
 describe("parseSeriesBody", () => {
@@ -65,6 +66,32 @@ describe("extractImdbId", () => {
 
   it("returns null for a non-IMDb url", () => {
     expect(extractImdbId("https://example.com")).toBeNull();
+  });
+});
+
+describe("parseImdbId", () => {
+  it("accepts a bare id", () => {
+    expect(parseImdbId("tt1234567")).toBe("tt1234567");
+  });
+
+  it("extracts the id from a full URL", () => {
+    expect(parseImdbId("https://www.imdb.com/title/tt1234567/")).toBe("tt1234567");
+  });
+
+  it("extracts the id from a URL with no trailing slash", () => {
+    expect(parseImdbId("https://www.imdb.com/title/tt1234567")).toBe("tt1234567");
+  });
+
+  it("extracts the id from a URL with a query string", () => {
+    expect(parseImdbId("https://www.imdb.com/title/tt1234567/?ref_=nv_sr_srsg_0")).toBe("tt1234567");
+  });
+
+  it("returns null when no tt-id is present", () => {
+    expect(parseImdbId("not an id")).toBeNull();
+  });
+
+  it("returns null for an empty string", () => {
+    expect(parseImdbId("")).toBeNull();
   });
 });
 

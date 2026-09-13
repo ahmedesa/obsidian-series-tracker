@@ -2,6 +2,7 @@ import { App, Modal, Notice, normalizePath, requestUrl } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
 import { OmdbClient, OmdbFetcher, OmdbSearchResult } from "./OmdbClient";
 import { todayIso } from "./dateUtil";
+import { parseImdbId } from "./SeriesParser";
 
 /** Hard cap on seasons fetched at add-time, to bound API calls for long-running shows. */
 const MAX_SEASONS_ON_ADD = 25;
@@ -62,6 +63,66 @@ export class AddSeriesModal extends Modal {
       if (e.key === "Enter") runSearch();
     });
     input.focus();
+
+    contentEl.createEl("p", {
+      text: "Can't find it by title (e.g. a non-English title)? Add it directly by IMDb ID or URL:",
+      cls: "st-modal-id-hint",
+    });
+    const idRow = contentEl.createDiv({ cls: "st-modal-search-row" });
+    const idInput = idRow.createEl("input", {
+      type: "text",
+      placeholder: "tt1234567 or https://www.imdb.com/title/tt1234567/",
+    });
+    const idBtn = idRow.createEl("button", { text: "Add by ID" });
+
+    const runIdAdd = async () => {
+      const imdbId = parseImdbId(idInput.value);
+      if (!imdbId) {
+        new Notice("Series Tracker: enter a valid IMDb id or URL (e.g. tt1234567).");
+        return;
+      }
+      idBtn.disabled = true;
+      idBtn.textContent = "Adding…";
+      const omdb = new OmdbClient(
+        this.plugin.settings.omdbApiKey,
+        this.plugin.settings.omdbCache,
+        async (c) => {
+          this.plugin.settings.omdbCache = c;
+          await this.plugin.saveSettings();
+        },
+        obsidianOmdbFetcher,
+      );
+      try {
+        const info = await omdb.getSeries(imdbId);
+        if (!info || !info.title) {
+          throw new Error(`no series found for ${imdbId}`);
+        }
+        if (info.type && info.type !== "series") {
+          throw new Error(`${imdbId} is a ${info.type}, not a series`);
+        }
+        const result: OmdbSearchResult = {
+          title: info.title,
+          year: info.year,
+          imdbId,
+          poster: info.poster,
+        };
+        idBtn.textContent = "Fetching seasons…";
+        await this.createSeriesNote(result, omdb);
+        new Notice(`Added "${result.title}"`);
+        this.onAdded();
+        this.close();
+      } catch (err) {
+        idBtn.disabled = false;
+        idBtn.textContent = "Add by ID";
+        console.error("Series Tracker: failed to add series by ID", err);
+        new Notice(`Series Tracker: failed to add series — ${err instanceof Error ? err.message : String(err)}`);
+      }
+    };
+
+    idBtn.addEventListener("click", runIdAdd);
+    idInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") runIdAdd();
+    });
   }
 
   private renderResults(results: OmdbSearchResult[], omdb: OmdbClient): void {

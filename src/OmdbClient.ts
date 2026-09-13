@@ -11,6 +11,8 @@ export interface OmdbSeasonResponse {
 }
 
 export interface OmdbSeriesInfo {
+  title: string;
+  year: string;
   plot: string;
   rated: string;
   runtime: string;
@@ -22,6 +24,8 @@ export interface OmdbSeriesInfo {
   totalSeasons: number;
   /** Derived from OMDb's `Year` field: `"2024–"` (ongoing) vs `"2011–2019"` (ended). */
   seriesEnded: boolean;
+  /** OMDb's `Type` field (`"series"` or `"movie"`) — used to reject a wrong-type id lookup. */
+  type: string;
 }
 
 /**
@@ -132,6 +136,8 @@ export class OmdbClient {
       if (json.Response !== "True") return (cached?.data as OmdbSeriesInfo) ?? null;
 
       const data: OmdbSeriesInfo = {
+        title: json.Title ?? "",
+        year: json.Year ?? "",
         plot: json.Plot ?? "",
         rated: json.Rated ?? "",
         runtime: json.Runtime ?? "",
@@ -142,6 +148,7 @@ export class OmdbClient {
         poster: json.Poster && json.Poster !== "N/A" ? json.Poster : "",
         totalSeasons: parseInt(json.totalSeasons, 10) || 0,
         seriesEnded: isSeriesEnded(json.Year),
+        type: json.Type ?? "",
       };
       this.cache[key] = { fetchedAt: Date.now(), data };
       await this.saveCache(this.cache);

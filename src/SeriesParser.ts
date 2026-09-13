@@ -238,6 +238,17 @@ export function extractImdbId(sourceUrl: string): string | null {
 }
 
 /**
+ * Parses a bare IMDb id (`tt1234567`) or a full IMDb title URL (with or
+ * without trailing slash/query string) into just the id. Returns null for
+ * anything that doesn't contain a `tt<digits>` id. Used by the "Add by
+ * IMDb ID/URL" fallback when OMDb's title search misses non-English titles.
+ */
+export function parseImdbId(input: string): string | null {
+  const m = input.trim().match(/(tt\d+)/);
+  return m ? m[1] : null;
+}
+
+/**
  * Toggles an episode line's checkbox. When checking a box, pass
  * `watchedDate` (e.g. today's date, `YYYY-MM-DD`) to stamp it onto the
  * line as `(watched: YYYY-MM-DD)`; unchecking always strips any existing
