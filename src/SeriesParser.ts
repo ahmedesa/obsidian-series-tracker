@@ -2,6 +2,7 @@ export interface Episode {
   number: number;
   title: string;
   watched: boolean;
+  watchedDate: string | null;
   lineIndex: number;
 }
 
@@ -62,6 +63,14 @@ export function splitFrontmatter(content: string): FrontmatterSplit {
 
 const SEASON_HEADING_RE = /^##\s+Season\s+(\d+)\s*$/;
 const EPISODE_LINE_RE = /^-\s+\[( |x|X)\]\s+E(\d+)\s*(?:—|-)?\s*(.*)$/;
+const WATCHED_DATE_SUFFIX_RE = /\s*\(watched:\s*(\d{4}-\d{2}-\d{2})\)\s*$/;
+
+/** Splits an episode's raw trailing text into its title and an optional `(watched: YYYY-MM-DD)` date. */
+export function stripWatchedDate(text: string): { title: string; watchedDate: string | null } {
+  const m = text.match(WATCHED_DATE_SUFFIX_RE);
+  if (!m) return { title: text.trim(), watchedDate: null };
+  return { title: text.slice(0, m.index).trim(), watchedDate: m[1] };
+}
 
 export function parseSeriesBody(body: string): Season[] {
   const lines = body.split("\n");
@@ -77,16 +86,95 @@ export function parseSeriesBody(body: string): Season[] {
     }
     const epMatch = line.match(EPISODE_LINE_RE);
     if (epMatch && current) {
+      const { title, watchedDate } = stripWatchedDate(epMatch[3]);
       current.episodes.push({
         number: parseInt(epMatch[2], 10),
-        title: epMatch[3].trim(),
+        title,
         watched: epMatch[1].toLowerCase() === "x",
+        watchedDate,
         lineIndex: idx,
       });
     }
   });
 
   return seasons;
+}
+
+export interface OmdbSeasonEpisodes {
+  number: number;
+  episodes: { episode: number; title: string }[];
+}
+
+export interface MergeResult {
+  body: string;
+  episodesAdded: number;
+  seasonsAdded: number;
+}
+
+/**
+ * Merges freshly-fetched OMDb season/episode data into an existing note
+ * body: appends any episode not already present (by number) to its
+ * season's block, and appends a brand-new `## Season N` block for any
+ * season not already present. Never touches existing lines — watched
+ * state and watched dates on already-tracked episodes are untouched.
+ */
+export function mergeNewEpisodes(body: string, seasonsData: OmdbSeasonEpisodes[]): MergeResult {
+  const lines = body.split("\n");
+  let episodesAdded = 0;
+  let seasonsAdded = 0;
+
+  const findSeasonHeadingLine = (num: number): number =>
+    lines.findIndex((l) => l.match(SEASON_HEADING_RE)?.[1] === String(num));
+
+  const findBlockEnd = (headingLine: number): number => {
+    for (let i = headingLine + 1; i < lines.length; i++) {
+      if (/^##\s/.test(lines[i])) return i;
+    }
+    return lines.length;
+  };
+
+  for (const season of [...seasonsData].sort((a, b) => a.number - b.number)) {
+    const headingLine = findSeasonHeadingLine(season.number);
+
+    if (headingLine === -1) {
+      // Brand-new season: insert before the first non-season "## " heading
+      // (e.g. Notes) if one exists, otherwise at the end of the body.
+      let insertAt = lines.findIndex((l) => /^##\s/.test(l) && !SEASON_HEADING_RE.test(l));
+      if (insertAt === -1) insertAt = lines.length;
+      const newLines = [
+        `## Season ${season.number}`,
+        ...season.episodes.map((ep) => `- [ ] E${ep.episode} — ${ep.title}`),
+        "",
+      ];
+      lines.splice(insertAt, 0, ...newLines);
+      episodesAdded += season.episodes.length;
+      seasonsAdded += 1;
+      continue;
+    }
+
+    const blockEnd = findBlockEnd(headingLine);
+    const existingNumbers = new Set<number>();
+    // Insert right after the last existing episode line in the block (not
+    // at blockEnd) — blockEnd can point past a trailing blank artifact of
+    // the body's final newline when this is the last season, which would
+    // otherwise leave a stray blank line before the newly-appended episode.
+    let lastEpisodeLine = headingLine;
+    for (let i = headingLine + 1; i < blockEnd; i++) {
+      const m = lines[i].match(EPISODE_LINE_RE);
+      if (m) {
+        existingNumbers.add(parseInt(m[2], 10));
+        lastEpisodeLine = i;
+      }
+    }
+    const missing = season.episodes.filter((ep) => !existingNumbers.has(ep.episode));
+    if (missing.length > 0) {
+      const insertLines = missing.map((ep) => `- [ ] E${ep.episode} — ${ep.title}`);
+      lines.splice(lastEpisodeLine + 1, 0, ...insertLines);
+      episodesAdded += missing.length;
+    }
+  }
+
+  return { body: lines.join("\n"), episodesAdded, seasonsAdded };
 }
 
 export function parseFrontmatter(fm: Record<string, any>): SeriesFrontmatter {
@@ -104,13 +192,30 @@ export function extractImdbId(sourceUrl: string): string | null {
   return m ? m[1] : null;
 }
 
-export function toggleEpisodeLine(bodyLines: string[], lineIndex: number, watched: boolean): string[] {
+/**
+ * Toggles an episode line's checkbox. When checking a box, pass
+ * `watchedDate` (e.g. today's date, `YYYY-MM-DD`) to stamp it onto the
+ * line as `(watched: YYYY-MM-DD)`; unchecking always strips any existing
+ * stamp. Leaves the episode number/title untouched.
+ */
+export function toggleEpisodeLine(
+  bodyLines: string[],
+  lineIndex: number,
+  watched: boolean,
+  watchedDate: string | null = null,
+): string[] {
   const out = [...bodyLines];
   const line = out[lineIndex];
   if (!line) return out;
-  out[lineIndex] = watched
-    ? line.replace(/^-\s+\[ \]/, "- [x]")
-    : line.replace(/^-\s+\[[xX]\]/, "- [ ]");
+
+  const epMatch = line.match(EPISODE_LINE_RE);
+  if (!epMatch) return out;
+
+  const epNum = epMatch[2];
+  const { title } = stripWatchedDate(epMatch[3]);
+  const checkbox = watched ? "[x]" : "[ ]";
+  const suffix = watched && watchedDate ? ` (watched: ${watchedDate})` : "";
+  out[lineIndex] = `- ${checkbox} E${epNum} — ${title}${suffix}`;
   return out;
 }
 

@@ -4,11 +4,13 @@ import {
   parseFrontmatter,
   extractImdbId,
   toggleEpisodeLine,
+  stripWatchedDate,
   splitFrontmatter,
   setFrontmatterNumberField,
   setFrontmatterStringField,
   getNotesSection,
   setNotesSection,
+  mergeNewEpisodes,
 } from "../src/SeriesParser";
 
 describe("parseSeriesBody", () => {
@@ -163,5 +165,85 @@ describe("toggleEpisodeLine", () => {
     const lines = ["- [x] E1 — Pilot"];
     const result = toggleEpisodeLine(lines, 0, false);
     expect(result[0]).toBe("- [ ] E1 — Pilot");
+  });
+
+  it("stamps a watched date when checking with one provided", () => {
+    const lines = ["- [ ] E1 — Pilot"];
+    const result = toggleEpisodeLine(lines, 0, true, "2026-09-13");
+    expect(result[0]).toBe("- [x] E1 — Pilot (watched: 2026-09-13)");
+  });
+
+  it("strips an existing watched date when unchecking", () => {
+    const lines = ["- [x] E1 — Pilot (watched: 2026-09-13)"];
+    const result = toggleEpisodeLine(lines, 0, false);
+    expect(result[0]).toBe("- [ ] E1 — Pilot");
+  });
+
+  it("replaces an existing watched date with a new one", () => {
+    const lines = ["- [x] E1 — Pilot (watched: 2026-09-01)"];
+    const result = toggleEpisodeLine(lines, 0, true, "2026-09-13");
+    expect(result[0]).toBe("- [x] E1 — Pilot (watched: 2026-09-13)");
+  });
+});
+
+describe("mergeNewEpisodes", () => {
+  it("appends new episodes to an existing season without touching existing lines", () => {
+    const body = "## Season 1\n- [x] E1 — Pilot (watched: 2026-09-01)\n- [ ] E2 — Second\n";
+    const result = mergeNewEpisodes(body, [
+      { number: 1, episodes: [{ episode: 1, title: "Pilot" }, { episode: 2, title: "Second" }, { episode: 3, title: "Third" }] },
+    ]);
+
+    expect(result.episodesAdded).toBe(1);
+    expect(result.seasonsAdded).toBe(0);
+    expect(result.body).toBe(
+      "## Season 1\n- [x] E1 — Pilot (watched: 2026-09-01)\n- [ ] E2 — Second\n- [ ] E3 — Third\n",
+    );
+  });
+
+  it("appends a brand-new season block when the season doesn't exist yet", () => {
+    const body = "## Season 1\n- [x] E1 — Pilot\n";
+    const result = mergeNewEpisodes(body, [
+      { number: 1, episodes: [{ episode: 1, title: "Pilot" }] },
+      { number: 2, episodes: [{ episode: 1, title: "New Season Opener" }] },
+    ]);
+
+    expect(result.episodesAdded).toBe(1);
+    expect(result.seasonsAdded).toBe(1);
+    expect(result.body).toBe(
+      "## Season 1\n- [x] E1 — Pilot\n\n## Season 2\n- [ ] E1 — New Season Opener\n",
+    );
+  });
+
+  it("inserts a new season block before a Notes section rather than after it", () => {
+    const body = "## Season 1\n- [x] E1 — Pilot\n\n## Notes\nSome thoughts.\n";
+    const result = mergeNewEpisodes(body, [
+      { number: 2, episodes: [{ episode: 1, title: "New Season Opener" }] },
+    ]);
+
+    expect(result.body).toBe(
+      "## Season 1\n- [x] E1 — Pilot\n\n## Season 2\n- [ ] E1 — New Season Opener\n\n## Notes\nSome thoughts.\n",
+    );
+  });
+
+  it("reports no changes when everything already exists", () => {
+    const body = "## Season 1\n- [x] E1 — Pilot\n";
+    const result = mergeNewEpisodes(body, [{ number: 1, episodes: [{ episode: 1, title: "Pilot" }] }]);
+
+    expect(result.episodesAdded).toBe(0);
+    expect(result.seasonsAdded).toBe(0);
+    expect(result.body).toBe(body);
+  });
+});
+
+describe("stripWatchedDate", () => {
+  it("returns the title unchanged when there is no date suffix", () => {
+    expect(stripWatchedDate("Pilot")).toEqual({ title: "Pilot", watchedDate: null });
+  });
+
+  it("extracts a watched date suffix", () => {
+    expect(stripWatchedDate("Pilot (watched: 2026-09-13)")).toEqual({
+      title: "Pilot",
+      watchedDate: "2026-09-13",
+    });
   });
 });

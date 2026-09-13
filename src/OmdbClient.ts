@@ -69,10 +69,10 @@ export class OmdbClient {
     return `${imdbId}:${season}`;
   }
 
-  async getSeason(imdbId: string, season: number): Promise<OmdbSeasonResponse | null> {
+  async getSeason(imdbId: string, season: number, forceRefresh = false): Promise<OmdbSeasonResponse | null> {
     const key = this.cacheKey(imdbId, season);
     const cached = this.cache[key];
-    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    if (!forceRefresh && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       return cached.data as OmdbSeasonResponse;
     }
     if (!this.apiKey) return (cached?.data as OmdbSeasonResponse) ?? null;
@@ -99,10 +99,10 @@ export class OmdbClient {
     }
   }
 
-  async getSeries(imdbId: string): Promise<OmdbSeriesInfo | null> {
+  async getSeries(imdbId: string, forceRefresh = false): Promise<OmdbSeriesInfo | null> {
     const key = `${imdbId}:series`;
     const cached = this.cache[key];
-    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    if (!forceRefresh && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       return cached.data as OmdbSeriesInfo;
     }
     if (!this.apiKey) return (cached?.data as OmdbSeriesInfo) ?? null;

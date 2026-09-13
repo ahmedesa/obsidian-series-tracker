@@ -10,8 +10,10 @@ import {
   setFrontmatterStringField,
   getNotesSection,
   setNotesSection,
+  mergeNewEpisodes,
   STATUS_OPTIONS,
 } from "./SeriesParser";
+import { todayIso } from "./dateUtil";
 import { OmdbClient, OmdbFetcher } from "./OmdbClient";
 
 /** Routes OMDb requests through Obsidian's CORS-safe requestUrl API. */
@@ -90,6 +92,67 @@ export async function renderShowDetail(
     });
 
     const imdbId = extractImdbId(fm.source_url);
+
+    // Refresh — force-refetch OMDb data (bypassing the 24h cache) and merge
+    // any newly-aired seasons/episodes into the note. Existing checkbox
+    // state and watched dates are never touched.
+    const refreshBtn = container.createEl("button", { cls: "st-refresh-btn", text: "↻ Refresh from OMDb" });
+    refreshBtn.addEventListener("click", async () => {
+      if (!imdbId) {
+        new Notice("Series Tracker: this note has no IMDb link to refresh from.");
+        return;
+      }
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = "Refreshing…";
+      try {
+        const freshOmdb = new OmdbClient(
+          plugin.settings.omdbApiKey,
+          plugin.settings.omdbCache,
+          async (c) => {
+            plugin.settings.omdbCache = c;
+            await plugin.saveSettings();
+          },
+          obsidianOmdbFetcher,
+        );
+        const freshInfo = await freshOmdb.getSeries(imdbId, true);
+        const seasonCount = Math.min(freshInfo?.totalSeasons || seasons.length || 1, 25);
+
+        const fetched = await Promise.all(
+          Array.from({ length: seasonCount }, (_, i) => i + 1).map(async (n) => {
+            const data = await freshOmdb.getSeason(imdbId, n, true);
+            return data ? { number: n, episodes: data.episodes.map((e) => ({ episode: e.episode, title: e.title })) } : null;
+          }),
+        );
+        const seasonsData = fetched.filter((s): s is NonNullable<typeof s> => s !== null);
+
+        let merged = { episodesAdded: 0, seasonsAdded: 0 };
+        await app.vault.process(file, (data) => {
+          const live = splitFrontmatter(data);
+          const result = mergeNewEpisodes(live.body, seasonsData);
+          merged = result;
+          let fmBlock = live.frontmatterBlock;
+          if (freshInfo?.totalSeasons) {
+            fmBlock = setFrontmatterNumberField(fmBlock, "total_seasons", freshInfo.totalSeasons);
+          }
+          return fmBlock + result.body;
+        });
+
+        if (merged.episodesAdded > 0) {
+          const seasonNote = merged.seasonsAdded > 0 ? ` (${merged.seasonsAdded} new season${merged.seasonsAdded > 1 ? "s" : ""})` : "";
+          new Notice(`Series Tracker: found ${merged.episodesAdded} new episode${merged.episodesAdded > 1 ? "s" : ""}${seasonNote}.`);
+        } else {
+          new Notice("Series Tracker: no new episodes.");
+        }
+        onChange();
+      } catch (err) {
+        console.error("Series Tracker: refresh failed", err);
+        new Notice(`Series Tracker: refresh failed — ${errorMessage(err)}`);
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = "↻ Refresh from OMDb";
+      }
+    });
+
     const omdb = new OmdbClient(
       plugin.settings.omdbApiKey,
       plugin.settings.omdbCache,
@@ -144,22 +207,27 @@ export async function renderShowDetail(
         const checkbox = row.createEl("input", { type: "checkbox" });
         checkbox.checked = ep.watched;
         row.createSpan({ text: ` E${ep.number} — ${ep.title}` });
+        const dateSpan = row.createSpan({ cls: "st-watched-date" });
+        if (ep.watchedDate) dateSpan.setText(` (watched ${ep.watchedDate})`);
         rowsByKey[`${season.number}:${ep.number}`] = row;
         checkboxes.push(checkbox);
 
         checkbox.addEventListener("change", async () => {
-          await writeEpisodeState(app, file, ep.lineIndex, checkbox.checked, checkbox, onChange);
+          const stamp = checkbox.checked ? todayIso() : null;
+          await writeEpisodeState(app, file, ep.lineIndex, checkbox.checked, stamp, checkbox, onChange);
+          dateSpan.setText(checkbox.checked && stamp ? ` (watched ${stamp})` : "");
         });
       }
 
       markWatchedBtn.addEventListener("click", async () => {
         markWatchedBtn.disabled = true;
+        const stamp = todayIso();
         try {
           await app.vault.process(file, (data) => {
             const live = splitFrontmatter(data);
             let lines = live.body.split("\n");
             for (const ep of season.episodes) {
-              lines = toggleEpisodeLine(lines, ep.lineIndex, true);
+              lines = toggleEpisodeLine(lines, ep.lineIndex, true, stamp);
             }
             return live.frontmatterBlock + lines.join("\n");
           });
@@ -234,6 +302,7 @@ async function writeEpisodeState(
   file: TFile,
   lineIndex: number,
   desired: boolean,
+  watchedDate: string | null,
   checkbox: HTMLInputElement,
   onChange: () => void,
 ): Promise<void> {
@@ -241,7 +310,7 @@ async function writeEpisodeState(
     await app.vault.process(file, (data) => {
       const live = splitFrontmatter(data);
       const liveLines = live.body.split("\n");
-      const newLines = toggleEpisodeLine(liveLines, lineIndex, desired);
+      const newLines = toggleEpisodeLine(liveLines, lineIndex, desired, watchedDate);
       return live.frontmatterBlock + newLines.join("\n");
     });
     onChange();

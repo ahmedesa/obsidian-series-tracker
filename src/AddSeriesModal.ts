@@ -1,6 +1,7 @@
 import { App, Modal, Notice, normalizePath, requestUrl } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
 import { OmdbClient, OmdbFetcher, OmdbSearchResult } from "./OmdbClient";
+import { todayIso } from "./dateUtil";
 
 /** Hard cap on seasons fetched at add-time, to bound API calls for long-running shows. */
 const MAX_SEASONS_ON_ADD = 25;
@@ -178,8 +179,4 @@ function sanitizeFileName(name: string): string {
 
 function escapeYamlString(s: string): string {
   return s.replace(/"/g, '\\"');
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
 }
