@@ -1,6 +1,5 @@
 import type {
   MetadataProvider,
-  MetadataEpisode,
   MetadataSeason,
   MetadataDetails,
   WatchProvider,

@@ -93,7 +93,7 @@ export class DashboardView extends ItemView {
     const results: { file: TFile; parsed: ParsedSeries }[] = [];
     for (const file of files) {
       const cache = this.app.metadataCache.getFileCache(file);
-      const fm = cache?.frontmatter;
+      const fm = cache?.frontmatter as Record<string, unknown> | undefined;
       if (!fm || fm.type !== "series") continue;
       const content = await this.app.vault.read(file);
       const { body } = splitFrontmatter(content);
