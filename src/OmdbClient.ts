@@ -52,17 +52,17 @@ export interface OmdbSearchResult {
   poster: string;
 }
 
-interface SeasonCacheEntry {
+export interface SeasonCacheEntry {
   fetchedAt: number;
   data: OmdbSeasonResponse;
 }
 
-interface SeriesCacheEntry {
+export interface SeriesCacheEntry {
   fetchedAt: number;
   data: OmdbSeriesInfo;
 }
 
-type CacheEntry = SeasonCacheEntry | SeriesCacheEntry;
+export type CacheEntry = SeasonCacheEntry | SeriesCacheEntry;
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 

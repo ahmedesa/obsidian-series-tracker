@@ -41,7 +41,7 @@ export async function renderShowDetail(
 
     const { body } = splitFrontmatter(content);
     const cache = app.metadataCache.getFileCache(file);
-    const fm = parseFrontmatter(cache?.frontmatter ?? {});
+    const fm = parseFrontmatter((cache?.frontmatter as Record<string, unknown> | undefined) ?? {});
     const seasons = parseSeriesBody(body);
 
     container.createEl("h2", { text: fm.title });
@@ -66,7 +66,7 @@ export async function renderShowDetail(
       cls: "st-status-hint",
       text: " (auto-managed unless set to Abandoned)",
     });
-    statusSelect.addEventListener("change", async () => {
+    const handleStatusChange = async () => {
       const next = statusSelect.value;
       const previous = fm.status;
       try {
@@ -80,7 +80,8 @@ export async function renderShowDetail(
         console.error("Series Tracker: failed to write status", err);
         new Notice(`Series Tracker: failed to save status — ${errorMessage(err)}`);
       }
-    });
+    };
+    statusSelect.addEventListener("change", () => void handleStatusChange());
 
     // Air-date lookups for auto-status, keyed "seasonNumber:episodeNumber".
     // Populated once the season fetches below resolve; `seriesEnded` comes
@@ -98,7 +99,7 @@ export async function renderShowDetail(
       ratingSelect.createEl("option", { value: String(i), text: String(i) });
     }
     ratingSelect.value = fm.rating !== null ? String(fm.rating) : "";
-    ratingSelect.addEventListener("change", async () => {
+    const handleRatingChange = async () => {
       const next = ratingSelect.value === "" ? null : parseInt(ratingSelect.value, 10);
       const previous = fm.rating;
       try {
@@ -112,7 +113,8 @@ export async function renderShowDetail(
         console.error("Series Tracker: failed to write rating", err);
         new Notice(`Series Tracker: failed to save rating — ${errorMessage(err)}`);
       }
-    });
+    };
+    ratingSelect.addEventListener("change", () => void handleRatingChange());
 
     const imdbId = extractImdbId(fm.source_url);
 
@@ -120,7 +122,7 @@ export async function renderShowDetail(
     // any newly-aired seasons/episodes into the note. Existing checkbox
     // state and watched dates are never touched.
     const refreshBtn = container.createEl("button", { cls: "st-refresh-btn", text: "↻ Refresh from OMDb" });
-    refreshBtn.addEventListener("click", async () => {
+    const handleRefresh = async () => {
       // Re-derive from a fresh read rather than trusting the outer `fm`/
       // `imdbId` closures — those came from metadataCache.getFileCache() at
       // render time, which can lag behind the file's real current content
@@ -198,7 +200,8 @@ export async function renderShowDetail(
         refreshBtn.disabled = false;
         refreshBtn.textContent = "↻ Refresh from OMDb";
       }
-    });
+    };
+    refreshBtn.addEventListener("click", () => void handleRefresh());
 
     const omdb = new OmdbClient(
       plugin.settings.omdbApiKey,
@@ -260,15 +263,16 @@ export async function renderShowDetail(
         rowsByKey[`${season.number}:${ep.number}`] = row;
         checkboxes.push(checkbox);
 
-        checkbox.addEventListener("change", async () => {
+        const handleEpisodeToggle = async () => {
           const stamp = checkbox.checked ? todayIso() : null;
           await writeEpisodeState(app, file, ep.lineIndex, checkbox.checked, stamp, checkbox, onChange);
           dateSpan.setText(checkbox.checked && stamp ? ` (watched ${stamp})` : "");
           await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag);
-        });
+        };
+        checkbox.addEventListener("change", () => void handleEpisodeToggle());
       }
 
-      markWatchedBtn.addEventListener("click", async () => {
+      const handleMarkSeasonWatched = async () => {
         markWatchedBtn.disabled = true;
         const stamp = todayIso();
         try {
@@ -289,7 +293,8 @@ export async function renderShowDetail(
         } finally {
           markWatchedBtn.disabled = false;
         }
-      });
+      };
+      markWatchedBtn.addEventListener("click", () => void handleMarkSeasonWatched());
     }
 
     // Freeform notes, stored under a `## Notes` heading in the body.
@@ -298,19 +303,20 @@ export async function renderShowDetail(
     const notesArea = notesSection.createEl("textarea", { cls: "st-notes-textarea" });
     notesArea.value = getNotesSection(body);
     let notesSaveTimer: number | undefined;
+    const saveNotes = async () => {
+      try {
+        await app.vault.process(file, (data) => {
+          const live = splitFrontmatter(data);
+          return live.frontmatterBlock + setNotesSection(live.body, notesArea.value);
+        });
+      } catch (err) {
+        console.error("Series Tracker: failed to save notes", err);
+        new Notice(`Series Tracker: failed to save notes — ${errorMessage(err)}`);
+      }
+    };
     notesArea.addEventListener("input", () => {
       window.clearTimeout(notesSaveTimer);
-      notesSaveTimer = window.setTimeout(async () => {
-        try {
-          await app.vault.process(file, (data) => {
-            const live = splitFrontmatter(data);
-            return live.frontmatterBlock + setNotesSection(live.body, notesArea.value);
-          });
-        } catch (err) {
-          console.error("Series Tracker: failed to save notes", err);
-          new Notice(`Series Tracker: failed to save notes — ${errorMessage(err)}`);
-        }
-      }, 600);
+      notesSaveTimer = window.setTimeout(() => void saveNotes(), 600);
     });
 
     // Delete — the only way to remove a tracked show from the UI (previously

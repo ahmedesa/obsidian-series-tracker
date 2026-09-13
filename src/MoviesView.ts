@@ -60,14 +60,14 @@ export class MoviesView extends ItemView {
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
         if (file instanceof TFile && this.isRelevantFile(file)) {
-          this.render();
+          void this.render();
         }
       }),
     );
     this.registerEvent(
       this.app.vault.on("create", (file) => {
         if (file instanceof TFile && this.isRelevantFile(file)) {
-          this.render();
+          void this.render();
         }
       }),
     );
@@ -89,7 +89,7 @@ export class MoviesView extends ItemView {
     const results: { file: TFile; parsed: ParsedMovie }[] = [];
     for (const file of files) {
       const cache = this.app.metadataCache.getFileCache(file);
-      const fm = cache?.frontmatter;
+      const fm = cache?.frontmatter as Record<string, unknown> | undefined;
       if (!fm || fm.type !== "movie") continue;
       results.push({
         file,
@@ -137,7 +137,7 @@ export class MoviesView extends ItemView {
 
     // Fire-and-forget: drop OMDb cache entries for shows/movies no longer
     // tracked. Never awaited — must not delay or race the render below.
-    this.pruneCache();
+    void this.pruneCache();
 
     const header = container.createDiv({ cls: "st-dashboard-header" });
 
@@ -149,7 +149,7 @@ export class MoviesView extends ItemView {
     filterInput.value = this.filterText;
     filterInput.addEventListener("input", () => {
       this.filterText = filterInput.value;
-      this.render();
+      void this.render();
     });
 
     const statusWrap = header.createDiv({ cls: "st-status-filter-wrap" });
@@ -173,7 +173,7 @@ export class MoviesView extends ItemView {
       row.createSpan({ cls: "st-status-menu-count", text: String(counts[opt.value] ?? 0) });
       row.addEventListener("click", () => {
         this.filterStatus = this.filterStatus === opt.value ? null : opt.value;
-        this.render();
+        void this.render();
       });
     }
     statusBtn.addEventListener("click", () => {
@@ -183,7 +183,7 @@ export class MoviesView extends ItemView {
 
     const addBtn = header.createEl("button", { cls: "st-add-series", text: "+ Add movie" });
     addBtn.addEventListener("click", () => {
-      new AddMovieModal(this.app, this.plugin, () => this.render()).open();
+      new AddMovieModal(this.app, this.plugin, () => void this.render()).open();
     });
 
     const filtered = all.filter(({ parsed }) => {
@@ -220,7 +220,7 @@ export class MoviesView extends ItemView {
       card.createDiv({ cls: "st-card-status", text: movieStatusLabel(parsed.frontmatter.status) });
       card.onClickEvent(() => {
         this.currentFile = file;
-        this.render();
+        void this.render();
       });
     }
 
@@ -257,17 +257,17 @@ export class MoviesView extends ItemView {
     const back = container.createEl("button", { text: "← Back to dashboard" });
     back.onClickEvent(() => {
       this.currentFile = null;
-      this.render();
+      void this.render();
     });
 
     await this.renderMovieDetail(
       container,
       file,
-      () => this.render(),
+      () => void this.render(),
       () => generation === this.renderGeneration,
       () => {
         this.currentFile = null;
-        this.render();
+        void this.render();
       },
     );
   }
@@ -285,7 +285,7 @@ export class MoviesView extends ItemView {
 
       const { body } = splitFrontmatter(content);
       const cache = this.app.metadataCache.getFileCache(file);
-      const fm = parseMovieFrontmatter(cache?.frontmatter ?? {});
+      const fm = parseMovieFrontmatter((cache?.frontmatter as Record<string, unknown> | undefined) ?? {});
 
       container.createEl("h2", { text: fm.title });
 
@@ -306,7 +306,7 @@ export class MoviesView extends ItemView {
         statusSelect.createEl("option", { value: opt.value, text: opt.label });
       }
       statusSelect.value = fm.status;
-      statusSelect.addEventListener("change", async () => {
+      const handleStatusChange = async () => {
         const next = statusSelect.value;
         const previous = fm.status;
         try {
@@ -326,7 +326,8 @@ export class MoviesView extends ItemView {
           console.error("Series Tracker: failed to write status", err);
           new Notice(`Series Tracker: failed to save status — ${errorMessage(err)}`);
         }
-      });
+      };
+      statusSelect.addEventListener("change", () => void handleStatusChange());
 
       // Personal rating — dropdown 0-5 (plus "Unrated").
       const ratingRow = container.createDiv({ cls: "st-rating-row" });
@@ -337,7 +338,7 @@ export class MoviesView extends ItemView {
         ratingSelect.createEl("option", { value: String(i), text: String(i) });
       }
       ratingSelect.value = fm.rating !== null ? String(fm.rating) : "";
-      ratingSelect.addEventListener("change", async () => {
+      const handleRatingChange = async () => {
         const next = ratingSelect.value === "" ? null : parseInt(ratingSelect.value, 10);
         const previous = fm.rating;
         try {
@@ -351,14 +352,15 @@ export class MoviesView extends ItemView {
           console.error("Series Tracker: failed to write rating", err);
           new Notice(`Series Tracker: failed to save rating — ${errorMessage(err)}`);
         }
-      });
+      };
+      ratingSelect.addEventListener("change", () => void handleRatingChange());
 
       // Favourite toggle.
       const favRow = container.createDiv({ cls: "st-rating-row" });
       const favCheckbox = favRow.createEl("input", { type: "checkbox" });
       favCheckbox.checked = fm.favourite;
       favRow.createSpan({ text: " Favourite" });
-      favCheckbox.addEventListener("change", async () => {
+      const handleFavouriteChange = async () => {
         const next = favCheckbox.checked;
         try {
           await this.app.vault.process(file, (data) => {
@@ -371,7 +373,8 @@ export class MoviesView extends ItemView {
           console.error("Series Tracker: failed to write favourite", err);
           new Notice(`Series Tracker: failed to save favourite — ${errorMessage(err)}`);
         }
-      });
+      };
+      favCheckbox.addEventListener("change", () => void handleFavouriteChange());
 
       const imdbId = extractImdbId(fm.source_url);
 
@@ -413,19 +416,20 @@ export class MoviesView extends ItemView {
       const notesArea = notesSection.createEl("textarea", { cls: "st-notes-textarea" });
       notesArea.value = getNotesSection(body);
       let notesSaveTimer: number | undefined;
+      const saveNotes = async () => {
+        try {
+          await this.app.vault.process(file, (data) => {
+            const live = splitFrontmatter(data);
+            return live.frontmatterBlock + setNotesSection(live.body, notesArea.value);
+          });
+        } catch (err) {
+          console.error("Series Tracker: failed to save notes", err);
+          new Notice(`Series Tracker: failed to save notes — ${errorMessage(err)}`);
+        }
+      };
       notesArea.addEventListener("input", () => {
         window.clearTimeout(notesSaveTimer);
-        notesSaveTimer = window.setTimeout(async () => {
-          try {
-            await this.app.vault.process(file, (data) => {
-              const live = splitFrontmatter(data);
-              return live.frontmatterBlock + setNotesSection(live.body, notesArea.value);
-            });
-          } catch (err) {
-            console.error("Series Tracker: failed to save notes", err);
-            new Notice(`Series Tracker: failed to save notes — ${errorMessage(err)}`);
-          }
-        }, 600);
+        notesSaveTimer = window.setTimeout(() => void saveNotes(), 600);
       });
 
       // Delete — the only way to remove a tracked movie from the UI

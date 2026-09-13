@@ -58,14 +58,14 @@ export class DashboardView extends ItemView {
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
         if (file instanceof TFile && this.isRelevantFile(file)) {
-          this.render();
+          void this.render();
         }
       }),
     );
     this.registerEvent(
       this.app.vault.on("create", (file) => {
         if (file instanceof TFile && this.isRelevantFile(file)) {
-          this.render();
+          void this.render();
         }
       }),
     );
@@ -139,7 +139,7 @@ export class DashboardView extends ItemView {
     // Fire-and-forget: drop OMDb cache entries for shows no longer tracked.
     // Never awaited/blocking — a stale cache entry costs nothing but disk
     // space, so this must not delay or race the render above it.
-    this.pruneCache();
+    void this.pruneCache();
 
     const header = container.createDiv({ cls: "st-dashboard-header" });
 
@@ -152,7 +152,7 @@ export class DashboardView extends ItemView {
     filterInput.value = this.filterText;
     filterInput.addEventListener("input", () => {
       this.filterText = filterInput.value;
-      this.render();
+      void this.render();
     });
 
     // Status filter — a button that opens a dropdown of the 5 statuses,
@@ -178,7 +178,7 @@ export class DashboardView extends ItemView {
       row.createSpan({ cls: "st-status-menu-count", text: String(counts[opt.value] ?? 0) });
       row.addEventListener("click", () => {
         this.filterStatus = this.filterStatus === opt.value ? null : opt.value;
-        this.render();
+        void this.render();
       });
     }
     statusBtn.addEventListener("click", () => {
@@ -188,7 +188,7 @@ export class DashboardView extends ItemView {
 
     const addBtn = header.createEl("button", { cls: "st-add-series", text: "+ Add series" });
     addBtn.addEventListener("click", () => {
-      new AddSeriesModal(this.app, this.plugin, () => this.render()).open();
+      new AddSeriesModal(this.app, this.plugin, () => void this.render()).open();
     });
 
     // Placeholder now; populated once the async OMDb air-date fetch below
@@ -250,7 +250,7 @@ export class DashboardView extends ItemView {
       card.createDiv({ cls: "st-card-progress", text: `${watched}/${episodes.length} (${pct}%)` });
       card.onClickEvent(() => {
         this.currentFile = file;
-        this.render();
+        void this.render();
       });
     }
 
@@ -444,7 +444,7 @@ export class DashboardView extends ItemView {
     info.createDiv({ cls: "st-nextup-date", text: nextUp.released });
 
     const markBtn = info.createEl("button", { cls: "st-nextup-mark", text: "Mark as watched" });
-    markBtn.addEventListener("click", async () => {
+    const handleMarkWatched = async () => {
       const file = fileByPath.get(nextUp.filePath);
       if (!file) return;
       markBtn.disabled = true;
@@ -455,13 +455,14 @@ export class DashboardView extends ItemView {
           const lines = toggleEpisodeLine(live.body.split("\n"), nextUp.lineIndex, true, stamp);
           return live.frontmatterBlock + lines.join("\n");
         });
-        this.render();
+        await this.render();
       } catch (err) {
         markBtn.disabled = false;
         console.error("Series Tracker: failed to mark episode watched", err);
         new Notice(`Series Tracker: failed to update episode — ${errorMessage(err)}`);
       }
-    });
+    };
+    markBtn.addEventListener("click", () => void handleMarkWatched());
   }
 
   private renderUpcoming(container: HTMLElement, candidates: UpcomingEpisode[]): void {
@@ -494,7 +495,7 @@ export class DashboardView extends ItemView {
     const back = container.createEl("button", { text: "← Back to dashboard" });
     back.onClickEvent(() => {
       this.currentFile = null;
-      this.render();
+      void this.render();
     });
 
     await renderShowDetail(
@@ -502,11 +503,11 @@ export class DashboardView extends ItemView {
       this.app,
       this.plugin,
       file,
-      () => this.render(),
+      () => void this.render(),
       () => generation === this.renderGeneration,
       () => {
         this.currentFile = null;
-        this.render();
+        void this.render();
       },
     );
   }

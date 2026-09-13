@@ -7,7 +7,7 @@ export class ConfirmModal extends Modal {
     private title: string,
     private message: string,
     private confirmLabel: string,
-    private onConfirm: () => void,
+    private onConfirm: () => void | Promise<void>,
   ) {
     super(app);
   }
@@ -25,7 +25,7 @@ export class ConfirmModal extends Modal {
     const confirmBtn = btnRow.createEl("button", { cls: "st-confirm-danger-btn", text: this.confirmLabel });
     confirmBtn.addEventListener("click", () => {
       this.close();
-      this.onConfirm();
+      void this.onConfirm();
     });
   }
 

@@ -2,13 +2,14 @@ import { Plugin, WorkspaceLeaf } from "obsidian";
 import { SeriesTrackerSettingTab } from "./SettingsTab";
 import { DashboardView, VIEW_TYPE_DASHBOARD } from "./DashboardView";
 import { MoviesView, VIEW_TYPE_MOVIES } from "./MoviesView";
-import { extractImdbId, normalizeFolderPath } from "./SeriesParser";
+import { asString, extractImdbId, normalizeFolderPath } from "./SeriesParser";
+import { CacheEntry } from "./OmdbClient";
 
 export interface SeriesTrackerSettings {
   omdbApiKey: string;
   seriesFolder: string;
   moviesFolder: string;
-  omdbCache: Record<string, { fetchedAt: number; data: any }>;
+  omdbCache: Record<string, CacheEntry>;
 }
 
 export const DEFAULT_SETTINGS: SeriesTrackerSettings = {
@@ -28,20 +29,20 @@ export default class SeriesTrackerPlugin extends Plugin {
     this.registerView(VIEW_TYPE_MOVIES, (leaf) => new MoviesView(leaf, this));
 
     this.addRibbonIcon("tv", "Open Series Tracker", () => {
-      this.activateView();
+      void this.activateView();
     });
     this.addRibbonIcon("clapperboard", "Open Movie Tracker", () => {
-      this.activateMoviesView();
+      void this.activateMoviesView();
     });
 
     this.addCommand({
-      id: "open-series-tracker",
-      name: "Open Series Tracker",
+      id: "open-dashboard",
+      name: "Open series dashboard",
       callback: () => this.activateView(),
     });
     this.addCommand({
-      id: "open-movie-tracker",
-      name: "Open Movie Tracker",
+      id: "open-movies",
+      name: "Open movies dashboard",
       callback: () => this.activateMoviesView(),
     });
 
@@ -55,7 +56,7 @@ export default class SeriesTrackerPlugin extends Plugin {
       leaf = workspace.getLeaf("tab");
       await leaf.setViewState({ type: VIEW_TYPE_DASHBOARD, active: true });
     }
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
   }
 
   async activateMoviesView() {
@@ -65,7 +66,7 @@ export default class SeriesTrackerPlugin extends Plugin {
       leaf = workspace.getLeaf("tab");
       await leaf.setViewState({ type: VIEW_TYPE_MOVIES, active: true });
     }
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
   }
 
   /**
@@ -81,9 +82,9 @@ export default class SeriesTrackerPlugin extends Plugin {
 
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!file.path.startsWith(seriesFolder) && !file.path.startsWith(moviesFolder)) continue;
-      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
       if (!fm || (fm.type !== "series" && fm.type !== "movie")) continue;
-      const id = extractImdbId(fm.source_url ?? "");
+      const id = extractImdbId(asString(fm.source_url));
       if (id) ids.add(id);
     }
     return ids;

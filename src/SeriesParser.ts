@@ -216,14 +216,23 @@ export function mergeNewEpisodes(body: string, seasonsData: OmdbSeasonEpisodes[]
   return { body: lines.join("\n"), episodesAdded, seasonsAdded };
 }
 
-export function parseFrontmatter(fm: Record<string, any>): SeriesFrontmatter {
+/** Obsidian's `metadataCache` exposes frontmatter as untyped data — narrow each field explicitly. */
+export function asString(v: unknown, fallback = ""): string {
+  return typeof v === "string" ? v : fallback;
+}
+
+export function asStringArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+
+export function parseFrontmatter(fm: Record<string, unknown>): SeriesFrontmatter {
   return {
-    title: fm.title ?? "",
-    status: fm.status ?? "want-to-watch",
+    title: asString(fm.title),
+    status: asString(fm.status, "want-to-watch"),
     rating: typeof fm.rating === "number" ? fm.rating : null,
-    image: fm.image ?? "",
-    source_url: fm.source_url ?? "",
-    date_added: typeof fm.date_added === "string" ? fm.date_added : "",
+    image: asString(fm.image),
+    source_url: asString(fm.source_url),
+    date_added: asString(fm.date_added),
   };
 }
 

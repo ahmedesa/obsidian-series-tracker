@@ -58,9 +58,9 @@ export class AddSeriesModal extends Modal {
       this.renderResults(results, omdb);
     };
 
-    searchBtn.addEventListener("click", runSearch);
+    searchBtn.addEventListener("click", () => void runSearch());
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") runSearch();
+      if (e.key === "Enter") void runSearch();
     });
     input.focus();
 
@@ -119,9 +119,9 @@ export class AddSeriesModal extends Modal {
       }
     };
 
-    idBtn.addEventListener("click", runIdAdd);
+    idBtn.addEventListener("click", () => void runIdAdd());
     idInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") runIdAdd();
+      if (e.key === "Enter") void runIdAdd();
     });
   }
 
@@ -140,7 +140,7 @@ export class AddSeriesModal extends Modal {
       const info = row.createDiv();
       info.createEl("div", { text: `${r.title} (${r.year})`, cls: "st-modal-result-title" });
       const addBtn = row.createEl("button", { text: "Add" });
-      addBtn.addEventListener("click", async () => {
+      const handleAdd = async () => {
         addBtn.disabled = true;
         addBtn.textContent = "Adding…";
         try {
@@ -155,7 +155,8 @@ export class AddSeriesModal extends Modal {
           console.error("Series Tracker: failed to add series", err);
           new Notice(`Series Tracker: failed to add series — ${err instanceof Error ? err.message : String(err)}`);
         }
-      });
+      };
+      addBtn.addEventListener("click", () => void handleAdd());
     }
   }
 
