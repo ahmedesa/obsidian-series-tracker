@@ -47,7 +47,9 @@ export async function renderShowDetail(
     const fm = parseFrontmatter((cache?.frontmatter) ?? {});
     const seasons = parseSeriesBody(body);
 
-    container.createEl("h2", { text: fm.title });
+    const titleRow = container.createDiv({ cls: "st-title-row" });
+    titleRow.createEl("h2", { text: fm.title });
+    const yearEl = titleRow.createSpan({ cls: "st-title-year" });
 
     if (fm.date_added) {
       container.createDiv({ cls: "st-date-added", text: `Added: ${fm.date_added}` });
@@ -279,6 +281,9 @@ export async function renderShowDetail(
       const info = await tmdb.getDetailsByExternalId(imdbId);
       if (!isCurrent()) return;
       seriesEndedFlag = info?.seriesEnded;
+      if (info?.year) {
+        yearEl.setText(`(${info.year})`);
+      }
       if (info) {
         const panel = container.createDiv({ cls: "st-info-panel" });
         if (info.plot) panel.createEl("p", { cls: "st-info-plot", text: info.plot });

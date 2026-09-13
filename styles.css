@@ -64,6 +64,15 @@
 .st-refresh-btn {
   margin-left: 8px;
 }
+.st-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.st-title-year {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
 .st-info-panel {
   background: var(--background-secondary);
   border-radius: 8px;
