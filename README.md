@@ -1,67 +1,133 @@
 # Series Tracker
 
-Obsidian plugin: a TrackSeries-style dashboard and episode checklist for
-`Media/Series/*.md` notes in the SecondBrain vault.
+An Obsidian plugin: a TrackSeries-style dashboard for TV series (episode
+checklists, air-date awareness, automatic status) and movies (watchlist
+grid, ratings, favourites) — reading and writing plain Markdown notes,
+never owning your data.
 
-## Install (local, not on community plugin store)
+## Features
+
+**Series**
+- Dashboard: poster grid, text + status filters, stats (episodes watched,
+  shows in progress, time spent watching)
+- "Next Up" spotlight (oldest aired-but-unwatched episode across all
+  tracked shows) and an "Upcoming" list grouped by air date
+- "Recently watched" feed
+- Per-show detail view: season/episode checklists, per-episode watched-date
+  stamps, "Mark season as watched", a "Refresh from OMDb" button that pulls
+  in newly-aired episodes without touching your existing watch state
+- Automatic status (Wishlist / Pending / Up to date / Completed), derived
+  from watch state and air dates — "Abandoned" is the one status you set
+  yourself and the plugin never overwrites
+- Personal 0–5 rating and a freeform Notes section per show
+
+**Movies**
+- Dashboard: poster grid, text + status filters, stats
+- Add via OMDb search (poster, genre, plot, etc. filled in automatically)
+- Personal 0–5 rating, favourite toggle, status (Want to Watch / Watching /
+  Watched — stamps a completion date), Notes section
+
+Both sections search and fetch metadata from the free
+[OMDb API](https://www.omdbapi.com/apikey.aspx) — you'll need your own key.
+
+## Install (local, not yet on the community plugin store)
 
 1. `npm install && npm run build`
 2. Copy `main.js`, `manifest.json`, `styles.css` into
    `<vault>/.obsidian/plugins/series-tracker/`
 3. Add `"series-tracker"` to `<vault>/.obsidian/community-plugins.json`
 4. Restart Obsidian, enable it in Settings → Community plugins if needed.
-5. Set your OMDb API key in Settings → Series Tracker.
+5. Set your OMDb API key, series folder, and movies folder in
+   Settings → Series Tracker.
 
 ## Note format
+
+### Series
 
 The dashboard only picks up notes under the configured series folder
 (default `Media/Series/`) whose frontmatter includes `type: series` — any
 note missing that field is silently skipped.
 
-A tracked series note looks like this:
-
 ```markdown
 ---
 type: series
-title: The Gentlemen
+title: Example Show
 status: watching
-rating: 8
+rating: 4
+total_seasons: 2
+source: manual
+source_url: https://www.imdb.com/title/tt0000000/
+tags: [Drama]
+date_added: 2026-09-13
+date_completed: ""
 image: https://example.com/poster.jpg
-source_url: https://www.imdb.com/title/tt13210838/
 ---
 
 ## Season 1
-- [x] E1 — Refined Aggression
-- [ ] E2 — Tackle Tommy Woo Woo
+- [x] E1 — Pilot (watched: 2026-09-13)
+- [ ] E2 — Second Episode
 
 ## Season 2
-- [ ] E1 — The Road to Kingdom
+- [ ] E1 — Season Opener
+
+## Notes
 ```
 
-Frontmatter fields:
+- `type` (required) — must be exactly `series`.
+- `status` — one of `want-to-watch` / `watching` / `up-to-date` / `finished`
+  / `abandoned`. The first four are auto-managed from watch state; only
+  `abandoned` is a pure manual choice the plugin never overwrites.
+- `rating` — `0`–`5` or `null`.
+- `source_url` — an IMDb title URL. When present, its IMDb id is used to
+  fetch season/episode air dates and series metadata from OMDb.
+- `image` — poster URL, must be an **absolute URL**.
+- Each season starts with a `## Season N` heading; episodes are Markdown
+  task items directly under it, `- [ ] E<number> — <title>`. Checking a box
+  in the plugin's detail view stamps `(watched: YYYY-MM-DD)` onto the line
+  and rewrites that exact line in the note — nothing else in the file is
+  touched.
+- A `## Notes` heading (anywhere in the body) holds freeform text, editable
+  from the detail view.
 
-- `type` (required) — must be exactly `series` for the note to appear on
-  the dashboard.
-- `title` — shown on the dashboard card and detail view.
-- `status`, `rating` — optional metadata, `status` defaults to
-  `want-to-watch` if omitted.
-- `image` — poster URL. Must be an **absolute URL** (e.g.
-  `https://...`); the dashboard grid renders it directly as an `<img src>`
-  and does not resolve vault-relative paths.
-- `source_url` — an IMDb title URL (e.g.
-  `https://www.imdb.com/title/tt13210838/`). When present, its IMDb id is
-  used to fetch season/episode air dates from OMDb.
+### Movies
 
-Body format:
+Notes under the configured movies folder (default `Media/Movies/`) with
+`type: movie` frontmatter:
 
-- Each season starts with a `## Season N` heading (e.g. `## Season 1`).
-- Episodes are listed as Markdown task list items directly under a season
-  heading, in the form `- [ ] E<number> — <title>` (unchecked) or
-  `- [x] E<number> — <title>` (checked/watched). Toggling the checkbox in
-  the dashboard's detail view updates this line in place in the note.
+```markdown
+---
+type: movie
+title: "Example Movie"
+status: want-to-watch
+source: manual
+source_url: ""
+genre: ["Action", "Drama"]
+language: ""
+favourite: false
+rating: null
+tags: ["Action", "Drama"]
+date_added: 2026-09-13
+date_completed: ""
+image: ""
+---
+
+# Example Movie
+```
+
+- `status` — one of `want-to-watch` / `watching` / `watched`. Setting it to
+  `watched` from the detail view stamps `date_completed`.
+- `favourite`, `rating` (`0`–`5` or `null`), `genre`/`tags` — same
+  conventions as series.
 
 ## Development
 
 `npm run dev` starts esbuild in watch mode — re-copy `main.js` into the
 vault's plugin folder after each change (or symlink it) and reload Obsidian
 (Cmd+P → "Reload app without saving") to see changes.
+
+`npm test` runs the unit test suite (vitest). `npm run build` type-checks
+(`tsc -noEmit`) before bundling — both must pass before a commit.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
