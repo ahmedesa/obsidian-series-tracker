@@ -37,35 +37,31 @@ export async function renderShowDetail(
 
     container.createEl("h2", { text: fm.title });
 
-    // Personal rating — 5 clickable stars, written back to the `rating`
-    // frontmatter field (mirrors the Movies notes' rating convention).
+    // Personal rating — dropdown 0-5 (plus "Unrated"), written back to the
+    // `rating` frontmatter field (mirrors the Movies notes' rating convention).
     const ratingRow = container.createDiv({ cls: "st-rating-row" });
     ratingRow.createSpan({ text: "Your rating: " });
-    const starButtons: HTMLButtonElement[] = [];
-    const paintStars = (value: number | null) => {
-      starButtons.forEach((btn, i) => {
-        btn.textContent = value !== null && i < value ? "★" : "☆";
-      });
-    };
-    for (let i = 1; i <= 5; i++) {
-      const star = ratingRow.createEl("button", { cls: "st-star" });
-      starButtons.push(star);
-      star.addEventListener("click", async () => {
-        const next = fm.rating === i ? null : i; // clicking the current rating clears it
-        try {
-          await app.vault.process(file, (data) => {
-            const live = splitFrontmatter(data);
-            return setFrontmatterNumberField(live.frontmatterBlock, "rating", next) + live.body;
-          });
-          fm.rating = next;
-          paintStars(next);
-        } catch (err) {
-          console.error("Series Tracker: failed to write rating", err);
-          new Notice(`Series Tracker: failed to save rating — ${errorMessage(err)}`);
-        }
-      });
+    const ratingSelect = ratingRow.createEl("select", { cls: "st-rating-select" });
+    ratingSelect.createEl("option", { value: "", text: "Unrated" });
+    for (let i = 0; i <= 5; i++) {
+      ratingSelect.createEl("option", { value: String(i), text: String(i) });
     }
-    paintStars(fm.rating);
+    ratingSelect.value = fm.rating !== null ? String(fm.rating) : "";
+    ratingSelect.addEventListener("change", async () => {
+      const next = ratingSelect.value === "" ? null : parseInt(ratingSelect.value, 10);
+      const previous = fm.rating;
+      try {
+        await app.vault.process(file, (data) => {
+          const live = splitFrontmatter(data);
+          return setFrontmatterNumberField(live.frontmatterBlock, "rating", next) + live.body;
+        });
+        fm.rating = next;
+      } catch (err) {
+        ratingSelect.value = previous !== null ? String(previous) : "";
+        console.error("Series Tracker: failed to write rating", err);
+        new Notice(`Series Tracker: failed to save rating — ${errorMessage(err)}`);
+      }
+    });
 
     const imdbId = extractImdbId(fm.source_url);
     const omdb = new OmdbClient(

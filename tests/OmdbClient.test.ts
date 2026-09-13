@@ -59,6 +59,7 @@ describe("OmdbClient", () => {
       imdbRating: "8.0",
       Genre: "Action, Comedy, Crime",
       Poster: "https://example.com/poster.jpg",
+      totalSeasons: "3",
     };
     global.fetch = vi.fn().mockResolvedValue({ json: async () => mockResponse }) as any;
 
@@ -77,6 +78,7 @@ describe("OmdbClient", () => {
       imdbRating: "8.0",
       genre: "Action, Comedy, Crime",
       poster: "https://example.com/poster.jpg",
+      totalSeasons: 3,
     });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect((fetch as any).mock.calls[0][0]).not.toContain("Season=");

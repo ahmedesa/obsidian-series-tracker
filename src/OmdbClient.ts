@@ -19,6 +19,7 @@ export interface OmdbSeriesInfo {
   imdbRating: string;
   genre: string;
   poster: string;
+  totalSeasons: number;
 }
 
 export interface OmdbSearchResult {
@@ -120,6 +121,7 @@ export class OmdbClient {
         imdbRating: json.imdbRating ?? "",
         genre: json.Genre ?? "",
         poster: json.Poster && json.Poster !== "N/A" ? json.Poster : "",
+        totalSeasons: parseInt(json.totalSeasons, 10) || 0,
       };
       this.cache[key] = { fetchedAt: Date.now(), data };
       await this.saveCache(this.cache);

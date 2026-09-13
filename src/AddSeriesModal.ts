@@ -1,6 +1,9 @@
-import { App, Modal, Notice, TFile, normalizePath, requestUrl } from "obsidian";
+import { App, Modal, Notice, normalizePath, requestUrl } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
 import { OmdbClient, OmdbFetcher, OmdbSearchResult } from "./OmdbClient";
+
+/** Hard cap on seasons fetched at add-time, to bound API calls for long-running shows. */
+const MAX_SEASONS_ON_ADD = 25;
 
 const obsidianOmdbFetcher: OmdbFetcher = async (url) => {
   const res = await requestUrl({ url });
@@ -79,6 +82,7 @@ export class AddSeriesModal extends Modal {
         addBtn.disabled = true;
         addBtn.textContent = "Adding…";
         try {
+          addBtn.textContent = "Fetching seasons…";
           await this.createSeriesNote(r, omdb);
           new Notice(`Added "${r.title}"`);
           this.onAdded();
@@ -104,6 +108,25 @@ export class AddSeriesModal extends Modal {
       ? info.genre.split(",").map((g) => `"${g.trim()}"`).join(", ")
       : "";
     const image = info?.poster || result.poster || "";
+    const totalSeasons = info?.totalSeasons ?? 0;
+    const seasonsToFetch = Math.min(totalSeasons, MAX_SEASONS_ON_ADD) || 1;
+
+    const seasonResults = await Promise.all(
+      Array.from({ length: seasonsToFetch }, (_, i) => i + 1).map((n) => omdb.getSeason(result.imdbId, n)),
+    );
+
+    const seasonBlocks = seasonResults
+      .map((season, i) => {
+        const number = i + 1;
+        if (!season || season.episodes.length === 0) {
+          return `## Season ${number}\n- [ ] E1\n`;
+        }
+        const lines = season.episodes
+          .map((ep) => `- [ ] E${ep.episode} — ${ep.title}`)
+          .join("\n");
+        return `## Season ${number}\n${lines}\n`;
+      })
+      .join("\n");
 
     const fileName = sanitizeFileName(`${result.title} (${result.year.replace(/[–-]$/, "")})`);
     const path = normalizePath(`${folder}/${fileName}.md`);
@@ -113,7 +136,7 @@ type: series
 title: "${escapeYamlString(result.title)}"
 status: want-to-watch
 rating: null
-total_seasons: null
+total_seasons: ${totalSeasons || "null"}
 source: manual
 source_url: "https://www.imdb.com/title/${result.imdbId}/"
 tags: [${genres}]
@@ -124,11 +147,11 @@ image: "${image}"
 
 # ${result.title}
 
+${seasonBlocks}
 ## Notes
 `;
 
-    const file = await this.app.vault.create(path, content);
-    await this.app.workspace.getLeaf("tab").openFile(file as TFile);
+    await this.app.vault.create(path, content);
   }
 
   onClose(): void {
