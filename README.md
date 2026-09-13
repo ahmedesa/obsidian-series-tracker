@@ -1,3 +1,5 @@
+<p align="center"><img src="logo.svg" width="96" height="96" alt="Series Tracker logo"></p>
+
 # Series Tracker
 
 [![CI](https://github.com/ahmedesa/obsidian-series-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedesa/obsidian-series-tracker/actions/workflows/ci.yml)

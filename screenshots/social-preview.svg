@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <rect width="1280" height="640" fill="#1c1c1e"/>
+  <g transform="translate(438, 168)">
+    <rect x="10" y="10" width="204" height="204" rx="48" fill="#8a63f2"/>
+    <path d="M87 75 L159 121 L87 167 Z" fill="#fff"/>
+    <circle cx="182" cy="64" r="19" fill="#ffd166"/>
+    <path d="M175 64 l5.5 5.5 l11.5 -13" stroke="#8a63f2" stroke-width="4.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="640" y="450" font-family="Helvetica, Arial, sans-serif" font-size="56" font-weight="700" fill="#f2f2f2" text-anchor="middle">Series Tracker</text>
+  <text x="640" y="500" font-family="Helvetica, Arial, sans-serif" font-size="26" fill="#9a9a9e" text-anchor="middle">Track series &amp; movies in your Obsidian vault</text>
+</svg>
