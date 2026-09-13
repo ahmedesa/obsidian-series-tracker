@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { parseSeriesBody, parseFrontmatter, extractImdbId, toggleEpisodeLine, splitFrontmatter } from "../src/SeriesParser";
+import {
+  parseSeriesBody,
+  parseFrontmatter,
+  extractImdbId,
+  toggleEpisodeLine,
+  splitFrontmatter,
+  setFrontmatterNumberField,
+  getNotesSection,
+  setNotesSection,
+} from "../src/SeriesParser";
 
 describe("parseSeriesBody", () => {
   it("parses seasons and episodes with watched state", () => {
@@ -82,6 +91,51 @@ describe("splitFrontmatter", () => {
 
     expect(frontmatterBlock).toBe("---\ntitle: X\n---\n");
     expect(body).toBe("Some note\n---\nmore text");
+  });
+});
+
+describe("setFrontmatterNumberField", () => {
+  it("replaces an existing numeric field", () => {
+    const fm = "---\ntitle: X\nrating: null\n---\n";
+    expect(setFrontmatterNumberField(fm, "rating", 4)).toBe("---\ntitle: X\nrating: 4\n---\n");
+  });
+
+  it("inserts the field before the closing fence when absent", () => {
+    const fm = "---\ntitle: X\n---\n";
+    expect(setFrontmatterNumberField(fm, "rating", 5)).toBe("---\ntitle: X\nrating: 5\n---\n");
+  });
+
+  it("writes literal null when value is null", () => {
+    const fm = "---\ntitle: X\nrating: 4\n---\n";
+    expect(setFrontmatterNumberField(fm, "rating", null)).toBe("---\ntitle: X\nrating: null\n---\n");
+  });
+});
+
+describe("getNotesSection / setNotesSection", () => {
+  it("returns empty string when no Notes heading exists", () => {
+    expect(getNotesSection("## Season 1\n- [ ] E1 — Pilot")).toBe("");
+  });
+
+  it("extracts text under a Notes heading", () => {
+    const body = "## Season 1\n- [ ] E1 — Pilot\n\n## Notes\nGreat pilot episode.\n";
+    expect(getNotesSection(body)).toBe("Great pilot episode.");
+  });
+
+  it("stops at the next heading after Notes", () => {
+    const body = "## Notes\nSome thoughts.\n\n## Season 1\n- [ ] E1 — Pilot";
+    expect(getNotesSection(body)).toBe("Some thoughts.");
+  });
+
+  it("appends a new Notes section when none exists", () => {
+    const body = "## Season 1\n- [ ] E1 — Pilot";
+    const result = setNotesSection(body, "Looking forward to this.");
+    expect(result).toBe("## Season 1\n- [ ] E1 — Pilot\n\n## Notes\nLooking forward to this.\n");
+  });
+
+  it("replaces an existing Notes section without touching the rest", () => {
+    const body = "## Notes\nOld note.\n\n## Season 1\n- [ ] E1 — Pilot";
+    const result = setNotesSection(body, "New note.");
+    expect(result).toBe("## Notes\nNew note.\n\n## Season 1\n- [ ] E1 — Pilot");
   });
 });
 

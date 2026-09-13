@@ -97,3 +97,54 @@ export function toggleEpisodeLine(bodyLines: string[], lineIndex: number, watche
     : line.replace(/^-\s+\[[xX]\]/, "- [ ]");
   return out;
 }
+
+/**
+ * Sets or inserts a numeric frontmatter field (e.g. `rating: 4`) inside an
+ * already-extracted frontmatter block (fences included). If the key exists
+ * its line is replaced; otherwise a new line is inserted just before the
+ * closing `---`. `value: null` writes the literal YAML `null`.
+ */
+export function setFrontmatterNumberField(
+  frontmatterBlock: string,
+  key: string,
+  value: number | null,
+): string {
+  const valueStr = value === null ? "null" : String(value);
+  const lineRe = new RegExp(`^${key}: .*$`, "m");
+  if (lineRe.test(frontmatterBlock)) {
+    return frontmatterBlock.replace(lineRe, `${key}: ${valueStr}`);
+  }
+  return frontmatterBlock.replace(/\n---\n?$/, `\n${key}: ${valueStr}\n---\n`);
+}
+
+const NOTES_HEADING_RE = /^## Notes\s*$/m;
+
+/** Returns the free-text content under a `## Notes` heading, if present. */
+export function getNotesSection(body: string): string {
+  const match = body.match(NOTES_HEADING_RE);
+  if (!match || match.index === undefined) return "";
+  const after = body.slice(match.index + match[0].length);
+  const nextHeading = after.search(/^##\s/m);
+  const section = nextHeading === -1 ? after : after.slice(0, nextHeading);
+  return section.trim();
+}
+
+/**
+ * Replaces (or appends) a `## Notes` section in the body with the given
+ * text. Preserves everything else in the body untouched.
+ */
+export function setNotesSection(body: string, text: string): string {
+  const match = body.match(NOTES_HEADING_RE);
+  const notesBlock = `## Notes\n${text.trim()}\n`;
+
+  if (!match || match.index === undefined) {
+    const trimmed = body.replace(/\n+$/, "");
+    return `${trimmed}\n\n${notesBlock}`;
+  }
+
+  const before = body.slice(0, match.index);
+  const after = body.slice(match.index + match[0].length);
+  const nextHeading = after.search(/^##\s/m);
+  const rest = nextHeading === -1 ? "" : after.slice(nextHeading);
+  return `${before}${notesBlock}${rest ? "\n" + rest : ""}`;
+}

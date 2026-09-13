@@ -88,3 +88,72 @@
   font-size: 0.8em;
   padding: 4px 10px;
 }
+.st-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+.st-star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2em;
+  color: var(--text-accent);
+  padding: 0 1px;
+}
+.st-notes-section {
+  margin-top: 20px;
+}
+.st-notes-textarea {
+  width: 100%;
+  min-height: 100px;
+  resize: vertical;
+  font-family: inherit;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+}
+.st-dashboard-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.st-add-series {
+  font-weight: 600;
+}
+.st-modal-search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.st-modal-search-row input {
+  flex: 1;
+}
+.st-modal-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.st-modal-result-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px;
+  background: var(--background-secondary);
+  border-radius: 6px;
+}
+.st-modal-result-row img {
+  width: 40px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.st-modal-result-title {
+  flex: 1;
+  font-weight: 500;
+}

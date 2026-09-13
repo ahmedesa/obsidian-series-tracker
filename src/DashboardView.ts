@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf, TFile, Notice } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
 import { parseSeriesBody, parseFrontmatter, splitFrontmatter, ParsedSeries } from "./SeriesParser";
 import { renderShowDetail } from "./ShowDetailView";
+import { AddSeriesModal } from "./AddSeriesModal";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
 
@@ -103,6 +104,12 @@ export class DashboardView extends ItemView {
       watchedEp += watched;
       if (watched > 0 && watched < episodes.length) inProgress++;
     }
+
+    const header = container.createDiv({ cls: "st-dashboard-header" });
+    const addBtn = header.createEl("button", { cls: "st-add-series", text: "+ Add series" });
+    addBtn.addEventListener("click", () => {
+      new AddSeriesModal(this.app, this.plugin, () => this.render()).open();
+    });
 
     const stats = container.createDiv({ cls: "st-stats" });
     const tile1 = stats.createDiv({ cls: "st-tile" });

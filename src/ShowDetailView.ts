@@ -1,6 +1,15 @@
 import { App, TFile, Notice, requestUrl } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
-import { parseSeriesBody, parseFrontmatter, extractImdbId, toggleEpisodeLine, splitFrontmatter } from "./SeriesParser";
+import {
+  parseSeriesBody,
+  parseFrontmatter,
+  extractImdbId,
+  toggleEpisodeLine,
+  splitFrontmatter,
+  setFrontmatterNumberField,
+  getNotesSection,
+  setNotesSection,
+} from "./SeriesParser";
 import { OmdbClient, OmdbFetcher } from "./OmdbClient";
 
 /** Routes OMDb requests through Obsidian's CORS-safe requestUrl API. */
@@ -27,6 +36,36 @@ export async function renderShowDetail(
     const seasons = parseSeriesBody(body);
 
     container.createEl("h2", { text: fm.title });
+
+    // Personal rating — 5 clickable stars, written back to the `rating`
+    // frontmatter field (mirrors the Movies notes' rating convention).
+    const ratingRow = container.createDiv({ cls: "st-rating-row" });
+    ratingRow.createSpan({ text: "Your rating: " });
+    const starButtons: HTMLButtonElement[] = [];
+    const paintStars = (value: number | null) => {
+      starButtons.forEach((btn, i) => {
+        btn.textContent = value !== null && i < value ? "★" : "☆";
+      });
+    };
+    for (let i = 1; i <= 5; i++) {
+      const star = ratingRow.createEl("button", { cls: "st-star" });
+      starButtons.push(star);
+      star.addEventListener("click", async () => {
+        const next = fm.rating === i ? null : i; // clicking the current rating clears it
+        try {
+          await app.vault.process(file, (data) => {
+            const live = splitFrontmatter(data);
+            return setFrontmatterNumberField(live.frontmatterBlock, "rating", next) + live.body;
+          });
+          fm.rating = next;
+          paintStars(next);
+        } catch (err) {
+          console.error("Series Tracker: failed to write rating", err);
+          new Notice(`Series Tracker: failed to save rating — ${errorMessage(err)}`);
+        }
+      });
+    }
+    paintStars(fm.rating);
 
     const imdbId = extractImdbId(fm.source_url);
     const omdb = new OmdbClient(
@@ -112,6 +151,27 @@ export async function renderShowDetail(
         }
       });
     }
+
+    // Freeform notes, stored under a `## Notes` heading in the body.
+    const notesSection = container.createDiv({ cls: "st-notes-section" });
+    notesSection.createEl("h3", { text: "Notes" });
+    const notesArea = notesSection.createEl("textarea", { cls: "st-notes-textarea" });
+    notesArea.value = getNotesSection(body);
+    let notesSaveTimer: number | undefined;
+    notesArea.addEventListener("input", () => {
+      window.clearTimeout(notesSaveTimer);
+      notesSaveTimer = window.setTimeout(async () => {
+        try {
+          await app.vault.process(file, (data) => {
+            const live = splitFrontmatter(data);
+            return live.frontmatterBlock + setNotesSection(live.body, notesArea.value);
+          });
+        } catch (err) {
+          console.error("Series Tracker: failed to save notes", err);
+          new Notice(`Series Tracker: failed to save notes — ${errorMessage(err)}`);
+        }
+      }, 600);
+    });
 
     if (!imdbId || seasons.length === 0) return;
 

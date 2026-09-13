@@ -1,0 +1,149 @@
+import { App, Modal, Notice, TFile, normalizePath, requestUrl } from "obsidian";
+import type SeriesTrackerPlugin from "./main";
+import { OmdbClient, OmdbFetcher, OmdbSearchResult } from "./OmdbClient";
+
+const obsidianOmdbFetcher: OmdbFetcher = async (url) => {
+  const res = await requestUrl({ url });
+  return { json: res.json };
+};
+
+/** Modal: search OMDb by title, pick a result, create a series note for it. */
+export class AddSeriesModal extends Modal {
+  private plugin: SeriesTrackerPlugin;
+  private onAdded: () => void;
+  private resultsEl!: HTMLElement;
+
+  constructor(app: App, plugin: SeriesTrackerPlugin, onAdded: () => void) {
+    super(app);
+    this.plugin = plugin;
+    this.onAdded = onAdded;
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: "Add series" });
+
+    const searchRow = contentEl.createDiv({ cls: "st-modal-search-row" });
+    const input = searchRow.createEl("input", {
+      type: "text",
+      placeholder: "Show title…",
+    });
+    const searchBtn = searchRow.createEl("button", { text: "Search" });
+
+    this.resultsEl = contentEl.createDiv({ cls: "st-modal-results" });
+
+    const runSearch = async () => {
+      const title = input.value.trim();
+      if (!title) return;
+      this.resultsEl.empty();
+      this.resultsEl.createEl("p", { text: "Searching…" });
+
+      const omdb = new OmdbClient(
+        this.plugin.settings.omdbApiKey,
+        this.plugin.settings.omdbCache,
+        async (c) => {
+          this.plugin.settings.omdbCache = c;
+          await this.plugin.saveSettings();
+        },
+        obsidianOmdbFetcher,
+      );
+
+      const results = await omdb.searchSeries(title);
+      this.renderResults(results, omdb);
+    };
+
+    searchBtn.addEventListener("click", runSearch);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") runSearch();
+    });
+    input.focus();
+  }
+
+  private renderResults(results: OmdbSearchResult[], omdb: OmdbClient): void {
+    this.resultsEl.empty();
+    if (results.length === 0) {
+      this.resultsEl.createEl("p", { text: "No results." });
+      return;
+    }
+
+    for (const r of results) {
+      const row = this.resultsEl.createDiv({ cls: "st-modal-result-row" });
+      if (r.poster) {
+        row.createEl("img", { attr: { src: r.poster } });
+      }
+      const info = row.createDiv();
+      info.createEl("div", { text: `${r.title} (${r.year})`, cls: "st-modal-result-title" });
+      const addBtn = row.createEl("button", { text: "Add" });
+      addBtn.addEventListener("click", async () => {
+        addBtn.disabled = true;
+        addBtn.textContent = "Adding…";
+        try {
+          await this.createSeriesNote(r, omdb);
+          new Notice(`Added "${r.title}"`);
+          this.onAdded();
+          this.close();
+        } catch (err) {
+          addBtn.disabled = false;
+          addBtn.textContent = "Add";
+          console.error("Series Tracker: failed to add series", err);
+          new Notice(`Series Tracker: failed to add series — ${err instanceof Error ? err.message : String(err)}`);
+        }
+      });
+    }
+  }
+
+  private async createSeriesNote(result: OmdbSearchResult, omdb: OmdbClient): Promise<void> {
+    const folder = this.plugin.settings.seriesFolder;
+    if (!(await this.app.vault.adapter.exists(folder))) {
+      await this.app.vault.createFolder(folder);
+    }
+
+    const info = await omdb.getSeries(result.imdbId);
+    const genres = info?.genre
+      ? info.genre.split(",").map((g) => `"${g.trim()}"`).join(", ")
+      : "";
+    const image = info?.poster || result.poster || "";
+
+    const fileName = sanitizeFileName(`${result.title} (${result.year.replace(/[–-]$/, "")})`);
+    const path = normalizePath(`${folder}/${fileName}.md`);
+
+    const content = `---
+type: series
+title: "${escapeYamlString(result.title)}"
+status: want-to-watch
+rating: null
+total_seasons: null
+source: manual
+source_url: "https://www.imdb.com/title/${result.imdbId}/"
+tags: [${genres}]
+date_added: ${todayIso()}
+date_completed: ""
+image: "${image}"
+---
+
+# ${result.title}
+
+## Notes
+`;
+
+    const file = await this.app.vault.create(path, content);
+    await this.app.workspace.getLeaf("tab").openFile(file as TFile);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
+function sanitizeFileName(name: string): string {
+  return name.replace(/[\\/:*?"<>|]/g, "-").trim();
+}
+
+function escapeYamlString(s: string): string {
+  return s.replace(/"/g, '\\"');
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}

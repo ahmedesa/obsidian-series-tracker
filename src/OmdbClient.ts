@@ -17,6 +17,15 @@ export interface OmdbSeriesInfo {
   country: string;
   awards: string;
   imdbRating: string;
+  genre: string;
+  poster: string;
+}
+
+export interface OmdbSearchResult {
+  title: string;
+  year: string;
+  imdbId: string;
+  poster: string;
 }
 
 interface SeasonCacheEntry {
@@ -109,12 +118,32 @@ export class OmdbClient {
         country: json.Country ?? "",
         awards: json.Awards ?? "",
         imdbRating: json.imdbRating ?? "",
+        genre: json.Genre ?? "",
+        poster: json.Poster && json.Poster !== "N/A" ? json.Poster : "",
       };
       this.cache[key] = { fetchedAt: Date.now(), data };
       await this.saveCache(this.cache);
       return data;
     } catch {
       return (cached?.data as OmdbSeriesInfo) ?? null;
+    }
+  }
+
+  /** One-off title search, not cached (queries vary too much to be worth caching). */
+  async searchSeries(title: string): Promise<OmdbSearchResult[]> {
+    if (!this.apiKey || !title.trim()) return [];
+    try {
+      const url = `https://www.omdbapi.com/?apikey=${this.apiKey}&s=${encodeURIComponent(title)}&type=series`;
+      const { json } = await this.fetcher(url);
+      if (json.Response !== "True") return [];
+      return (json.Search ?? []).map((r: any) => ({
+        title: r.Title,
+        year: r.Year,
+        imdbId: r.imdbID,
+        poster: r.Poster && r.Poster !== "N/A" ? r.Poster : "",
+      }));
+    } catch {
+      return [];
     }
   }
 }
