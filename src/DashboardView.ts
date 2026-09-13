@@ -21,6 +21,7 @@ import { UpcomingEpisode, findNextUp, findUpcoming, groupUpcomingByDate } from "
 import { findRecentlyWatched } from "./recentlyWatched";
 import { pruneOmdbCache } from "./cachePrune";
 import { topRatedGenres, excludeTracked, normalizeTitle } from "./recommendations";
+import { renderMetricsPanel } from "./metricsPanel";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
 
@@ -145,6 +146,8 @@ export class DashboardView extends ItemView {
     // Never awaited/blocking — a stale cache entry costs nothing but disk
     // space, so this must not delay or race the render above it.
     void this.pruneCache();
+
+    renderMetricsPanel(container, this.app, this.plugin, () => generation === this.renderGeneration);
 
     const header = container.createDiv({ cls: "st-dashboard-header" });
 

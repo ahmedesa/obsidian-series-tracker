@@ -415,6 +415,23 @@
   font-size: 0.8em;
   padding: 2px 8px;
 }
+.st-metrics-panel {
+  margin-bottom: 16px;
+}
+.st-metrics-toggle {
+  width: 100%;
+  text-align: left;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+.st-metrics-body {
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 6px;
+}
 .st-metrics-section {
   margin-bottom: 28px;
 }

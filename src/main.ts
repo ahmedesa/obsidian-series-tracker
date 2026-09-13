@@ -2,7 +2,6 @@ import { Plugin, WorkspaceLeaf } from "obsidian";
 import { SeriesTrackerSettingTab } from "./SettingsTab";
 import { DashboardView, VIEW_TYPE_DASHBOARD } from "./DashboardView";
 import { MoviesView, VIEW_TYPE_MOVIES } from "./MoviesView";
-import { MetricsView, VIEW_TYPE_METRICS } from "./MetricsView";
 import { asString, extractImdbId, normalizeFolderPath } from "./SeriesParser";
 import { CacheEntry } from "./TmdbClient";
 
@@ -37,16 +36,12 @@ export default class SeriesTrackerPlugin extends Plugin {
 
     this.registerView(VIEW_TYPE_DASHBOARD, (leaf) => new DashboardView(leaf, this));
     this.registerView(VIEW_TYPE_MOVIES, (leaf) => new MoviesView(leaf, this));
-    this.registerView(VIEW_TYPE_METRICS, (leaf) => new MetricsView(leaf, this));
 
     this.addRibbonIcon("tv", "Open Series Tracker", () => {
       void this.activateView();
     });
     this.addRibbonIcon("clapperboard", "Open Movie Tracker", () => {
       void this.activateMoviesView();
-    });
-    this.addRibbonIcon("bar-chart-3", "Open Series Tracker metrics", () => {
-      void this.activateMetricsView();
     });
 
     this.addCommand({
@@ -58,11 +53,6 @@ export default class SeriesTrackerPlugin extends Plugin {
       id: "open-movies",
       name: "Open movies dashboard",
       callback: () => this.activateMoviesView(),
-    });
-    this.addCommand({
-      id: "open-metrics",
-      name: "Open metrics",
-      callback: () => this.activateMetricsView(),
     });
 
     this.addSettingTab(new SeriesTrackerSettingTab(this.app, this));
@@ -84,16 +74,6 @@ export default class SeriesTrackerPlugin extends Plugin {
     if (!leaf) {
       leaf = workspace.getLeaf("tab");
       await leaf.setViewState({ type: VIEW_TYPE_MOVIES, active: true });
-    }
-    await workspace.revealLeaf(leaf);
-  }
-
-  async activateMetricsView() {
-    const { workspace } = this.app;
-    let leaf: WorkspaceLeaf | null = workspace.getLeavesOfType(VIEW_TYPE_METRICS)[0] ?? null;
-    if (!leaf) {
-      leaf = workspace.getLeaf("tab");
-      await leaf.setViewState({ type: VIEW_TYPE_METRICS, active: true });
     }
     await workspace.revealLeaf(leaf);
   }

@@ -22,6 +22,7 @@ import { todayIso, formatDurationMinutes } from "./dateUtil";
 import { ConfirmModal } from "./ConfirmModal";
 import { pruneOmdbCache } from "./cachePrune";
 import { topRatedGenres, excludeTracked, normalizeTitle } from "./recommendations";
+import { renderMetricsPanel } from "./metricsPanel";
 
 export const VIEW_TYPE_MOVIES = "series-tracker-movies";
 
@@ -144,6 +145,8 @@ export class MoviesView extends ItemView {
     // Fire-and-forget: drop TMDb cache entries for shows/movies no longer
     // tracked. Never awaited — must not delay or race the render below.
     void this.pruneCache();
+
+    renderMetricsPanel(container, this.app, this.plugin, () => generation === this.renderGeneration);
 
     const header = container.createDiv({ cls: "st-dashboard-header" });
 
