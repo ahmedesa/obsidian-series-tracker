@@ -77,6 +77,7 @@ source_url: https://www.imdb.com/title/tt0000000/
 tags: [Drama]
 date_added: 2026-09-13
 date_completed: ""
+mood: ""
 image: https://example.com/poster.jpg
 ---
 
@@ -99,6 +100,12 @@ image: https://example.com/poster.jpg
   a TMDb id (cached) and used to fetch season/episode air dates and series
   metadata from TMDb.
 - `image` — poster URL, must be an **absolute URL**.
+- `date_completed` — auto-stamped when status reaches `finished`, cleared if
+  it moves away; editable in the detail view ("Completed on") to correct or
+  backdate it.
+- `mood` — a short curated "how did this make you feel" tag, editable in the
+  detail view: `Feel-Good` / `Uplifting` / `Intense` / `Suspenseful` / `Sad`
+  / `Relaxing` / `Thought-Provoking` / `Dark`, or empty for unset.
 - Each season starts with a `## Season N` heading; episodes are Markdown
   task items directly under it, `- [ ] E<number> — <title>`. Checking a box
   in the plugin's detail view stamps `(watched: YYYY-MM-DD)` onto the line
@@ -126,6 +133,7 @@ rating: null
 tags: ["Action", "Drama"]
 date_added: 2026-09-13
 date_completed: ""
+mood: ""
 image: ""
 ---
 
@@ -133,9 +141,12 @@ image: ""
 ```
 
 - `status` — one of `want-to-watch` / `watching` / `watched`. Setting it to
-  `watched` from the detail view stamps `date_completed`.
+  `watched` from the detail view stamps `date_completed`; editable there
+  ("Completed on") to correct or backdate it.
 - `favourite`, `rating` (`0`–`5` or `null`), `genre`/`tags` — same
   conventions as series.
+- `mood` — same short curated tag as series (see above), editable in the
+  detail view.
 
 ## Development
 

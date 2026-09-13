@@ -18,6 +18,8 @@ export interface SeriesFrontmatter {
   image: string;
   source_url: string;
   date_added: string;
+  date_completed: string;
+  mood: string;
   tags: string[];
 }
 
@@ -234,9 +236,26 @@ export function parseFrontmatter(fm: Record<string, unknown>): SeriesFrontmatter
     image: asString(fm.image),
     source_url: asString(fm.source_url),
     date_added: asString(fm.date_added),
+    date_completed: asString(fm.date_completed),
+    mood: asString(fm.mood),
     tags: asStringArray(fm.tags),
   };
 }
+
+/**
+ * Fixed mood options — deliberately a short curated list ("how did this
+ * make you feel"), not exhaustive. Shared by both series and movies.
+ */
+export const MOOD_OPTIONS: string[] = [
+  "Feel-Good",
+  "Uplifting",
+  "Intense",
+  "Suspenseful",
+  "Sad",
+  "Relaxing",
+  "Thought-Provoking",
+  "Dark",
+];
 
 /** Rating dropdown values: 0-5 in 0.5 steps, e.g. [0, 0.5, 1, 1.5, ..., 5]. */
 export const RATING_OPTIONS: number[] = Array.from({ length: 11 }, (_, i) => i * 0.5);

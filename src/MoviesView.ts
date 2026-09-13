@@ -14,6 +14,7 @@ import {
   movieStatusLabel,
   RATING_OPTIONS,
   extractDistinctGenres,
+  MOOD_OPTIONS,
 } from "./MovieParser";
 import { AddMovieModal } from "./AddMovieModal";
 import { createMetadataProvider, MetadataProvider, MetadataSearchResult } from "./MetadataProvider";
@@ -436,6 +437,30 @@ export class MoviesView extends ItemView {
         container.createDiv({ cls: "st-date-added", text: `Added: ${fm.date_added}` });
       }
 
+      // Completed-on date — auto-stamped when status becomes "watched" (see
+      // handleStatusChange below), but editable here so the user can correct
+      // or backdate it.
+      const completedRow = container.createDiv({ cls: "st-completed-row" });
+      completedRow.createSpan({ text: "Completed on: " });
+      const completedInput = completedRow.createEl("input", { type: "date", cls: "st-completed-input" });
+      completedInput.value = fm.date_completed;
+      const handleCompletedChange = async () => {
+        const next = completedInput.value;
+        const previous = fm.date_completed;
+        try {
+          await this.app.vault.process(file, (data) => {
+            const live = splitFrontmatter(data);
+            return setFrontmatterStringField(live.frontmatterBlock, "date_completed", `"${next}"`) + live.body;
+          });
+          fm.date_completed = next;
+        } catch (err) {
+          completedInput.value = previous;
+          console.error("Series Tracker: failed to write completed date", err);
+          new Notice(`Series Tracker: failed to save completed date — ${errorMessage(err)}`);
+        }
+      };
+      completedInput.addEventListener("change", () => void handleCompletedChange());
+
       // Status — 3-value picker. Stamps date_completed with today on
       // transition into "watched"; clears it on transition out.
       const statusRow = container.createDiv({ cls: "st-status-row" });
@@ -449,17 +474,24 @@ export class MoviesView extends ItemView {
         const next = statusSelect.value;
         const previous = fm.status;
         try {
+          let stampedDate: string | undefined;
           await this.app.vault.process(file, (data) => {
             const live = splitFrontmatter(data);
             let fmBlock = setFrontmatterStringField(live.frontmatterBlock, "status", next);
             if (next === "watched" && previous !== "watched") {
-              fmBlock = setFrontmatterStringField(fmBlock, "date_completed", `"${todayIso()}"`);
+              stampedDate = todayIso();
+              fmBlock = setFrontmatterStringField(fmBlock, "date_completed", `"${stampedDate}"`);
             } else if (next !== "watched" && previous === "watched") {
+              stampedDate = "";
               fmBlock = setFrontmatterStringField(fmBlock, "date_completed", `""`);
             }
             return fmBlock + live.body;
           });
           fm.status = next;
+          if (stampedDate !== undefined) {
+            fm.date_completed = stampedDate;
+            completedInput.value = stampedDate;
+          }
         } catch (err) {
           statusSelect.value = previous;
           console.error("Series Tracker: failed to write status", err);
@@ -493,6 +525,33 @@ export class MoviesView extends ItemView {
         }
       };
       ratingSelect.addEventListener("change", () => void handleRatingChange());
+
+      // Mood — a short curated "how did this make you feel" list, purely a
+      // personal tag, no auto-management.
+      const moodRow = container.createDiv({ cls: "st-mood-row" });
+      moodRow.createSpan({ text: "Mood: " });
+      const moodSelect = moodRow.createEl("select", { cls: "st-mood-select" });
+      moodSelect.createEl("option", { value: "", text: "—" });
+      for (const m of MOOD_OPTIONS) {
+        moodSelect.createEl("option", { value: m, text: m });
+      }
+      moodSelect.value = fm.mood;
+      const handleMoodChange = async () => {
+        const next = moodSelect.value;
+        const previous = fm.mood;
+        try {
+          await this.app.vault.process(file, (data) => {
+            const live = splitFrontmatter(data);
+            return setFrontmatterStringField(live.frontmatterBlock, "mood", `"${next}"`) + live.body;
+          });
+          fm.mood = next;
+        } catch (err) {
+          moodSelect.value = previous;
+          console.error("Series Tracker: failed to write mood", err);
+          new Notice(`Series Tracker: failed to save mood — ${errorMessage(err)}`);
+        }
+      };
+      moodSelect.addEventListener("change", () => void handleMoodChange());
 
       // Favourite toggle.
       const favRow = container.createDiv({ cls: "st-rating-row" });

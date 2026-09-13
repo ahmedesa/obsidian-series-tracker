@@ -15,6 +15,7 @@ import {
   normalizeFolderPath,
   parseImdbId,
   RATING_OPTIONS,
+  MOOD_OPTIONS,
   extractDistinctGenres,
 } from "../src/SeriesParser";
 
@@ -57,6 +58,8 @@ describe("parseFrontmatter", () => {
       rating: null,
       image: "",
       source_url: "",
+      date_completed: "",
+      mood: "",
     });
   });
 });
@@ -340,6 +343,21 @@ describe("stripWatchedDate", () => {
 describe("RATING_OPTIONS", () => {
   it("is 0-5 in 0.5 steps", () => {
     expect(RATING_OPTIONS).toEqual([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]);
+  });
+});
+
+describe("MOOD_OPTIONS", () => {
+  it("is a short curated list of 8 moods", () => {
+    expect(MOOD_OPTIONS).toEqual([
+      "Feel-Good",
+      "Uplifting",
+      "Intense",
+      "Suspenseful",
+      "Sad",
+      "Relaxing",
+      "Thought-Provoking",
+      "Dark",
+    ]);
   });
 });
 

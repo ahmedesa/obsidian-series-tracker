@@ -16,6 +16,7 @@ import {
   STATUS_OPTIONS,
   SeriesFrontmatter,
   RATING_OPTIONS,
+  MOOD_OPTIONS,
 } from "./SeriesParser";
 import { todayIso, isAired } from "./dateUtil";
 import { createMetadataProvider, MetadataProvider } from "./MetadataProvider";
@@ -51,6 +52,30 @@ export async function renderShowDetail(
     if (fm.date_added) {
       container.createDiv({ cls: "st-date-added", text: `Added: ${fm.date_added}` });
     }
+
+    // Completed-on date — auto-stamped when status reaches "finished" (see
+    // autoUpdateStatus below), but editable here so the user can correct or
+    // backdate it.
+    const completedRow = container.createDiv({ cls: "st-completed-row" });
+    completedRow.createSpan({ text: "Completed on: " });
+    const completedInput = completedRow.createEl("input", { type: "date", cls: "st-completed-input" });
+    completedInput.value = fm.date_completed;
+    const handleCompletedChange = async () => {
+      const next = completedInput.value;
+      const previous = fm.date_completed;
+      try {
+        await app.vault.process(file, (data) => {
+          const live = splitFrontmatter(data);
+          return setFrontmatterStringField(live.frontmatterBlock, "date_completed", `"${next}"`) + live.body;
+        });
+        fm.date_completed = next;
+      } catch (err) {
+        completedInput.value = previous;
+        console.error("Series Tracker: failed to write completed date", err);
+        new Notice(`Series Tracker: failed to save completed date — ${errorMessage(err)}`);
+      }
+    };
+    completedInput.addEventListener("change", () => void handleCompletedChange());
 
     // Status — same 5 options as the dashboard's status filter. Wishlist/
     // Pending/Up to date/Completed are auto-managed (see autoUpdateStatus
@@ -118,6 +143,33 @@ export async function renderShowDetail(
       }
     };
     ratingSelect.addEventListener("change", () => void handleRatingChange());
+
+    // Mood — a short curated "how did this make you feel" list, purely a
+    // personal tag, no auto-management.
+    const moodRow = container.createDiv({ cls: "st-mood-row" });
+    moodRow.createSpan({ text: "Mood: " });
+    const moodSelect = moodRow.createEl("select", { cls: "st-mood-select" });
+    moodSelect.createEl("option", { value: "", text: "—" });
+    for (const m of MOOD_OPTIONS) {
+      moodSelect.createEl("option", { value: m, text: m });
+    }
+    moodSelect.value = fm.mood;
+    const handleMoodChange = async () => {
+      const next = moodSelect.value;
+      const previous = fm.mood;
+      try {
+        await app.vault.process(file, (data) => {
+          const live = splitFrontmatter(data);
+          return setFrontmatterStringField(live.frontmatterBlock, "mood", `"${next}"`) + live.body;
+        });
+        fm.mood = next;
+      } catch (err) {
+        moodSelect.value = previous;
+        console.error("Series Tracker: failed to write mood", err);
+        new Notice(`Series Tracker: failed to save mood — ${errorMessage(err)}`);
+      }
+    };
+    moodSelect.addEventListener("change", () => void handleMoodChange());
 
     const imdbId = extractImdbId(fm.source_url);
 
@@ -187,7 +239,7 @@ export async function renderShowDetail(
           new Notice("Series Tracker: no new episodes.");
         }
         onChange();
-        await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag);
+        await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
       } catch (err) {
         console.error("Series Tracker: refresh failed", err);
         new Notice(`Series Tracker: refresh failed — ${errorMessage(err)}`);
@@ -254,7 +306,7 @@ export async function renderShowDetail(
           const stamp = checkbox.checked ? todayIso() : null;
           await writeEpisodeState(app, file, ep.lineIndex, checkbox.checked, stamp, checkbox, onChange);
           dateSpan.setText(checkbox.checked && stamp ? ` (watched ${stamp})` : "");
-          await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag);
+          await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
         };
         checkbox.addEventListener("change", () => void handleEpisodeToggle());
       }
@@ -273,7 +325,7 @@ export async function renderShowDetail(
           });
           for (const cb of checkboxes) cb.checked = true;
           onChange();
-          await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag);
+          await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
         } catch (err) {
           console.error("Series Tracker: failed to mark season watched", err);
           new Notice(`Series Tracker: failed to mark season watched — ${errorMessage(err)}`);
@@ -361,7 +413,7 @@ export async function renderShowDetail(
     // covers the case where TMDb data changed (e.g. a new episode aired)
     // since the last time this note was touched, without requiring an
     // explicit interaction first.
-    await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag);
+    await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
   } catch (err) {
     console.error("Series Tracker: failed to render show detail", err);
     if (isCurrent()) {
@@ -409,11 +461,13 @@ async function autoUpdateStatus(
   statusSelect: HTMLSelectElement,
   episodeAirDates: Map<string, string>,
   seriesEnded: boolean | undefined,
+  completedInput?: HTMLInputElement,
 ): Promise<void> {
   if (fm.status === MANUAL_ONLY_STATUS) return;
 
   try {
     let newStatus: string | null = null;
+    let newCompletedDate: string | undefined;
     await app.vault.process(file, (data) => {
       const live = splitFrontmatter(data);
       const liveSeasons = parseSeriesBody(live.body);
@@ -426,11 +480,26 @@ async function autoUpdateStatus(
       const derived = deriveStatus(allEpisodes, seriesEnded ?? false, (released) => isAired(released));
       if (derived === fm.status) return data;
       newStatus = derived;
-      return setFrontmatterStringField(live.frontmatterBlock, "status", derived) + live.body;
+      let fmBlock = setFrontmatterStringField(live.frontmatterBlock, "status", derived);
+      // Mirror movies' auto-stamp-on-completion behavior: stamp today's date
+      // when status reaches "finished", clear it when moving away from it.
+      // The user can still edit this manually via the "Completed on" field.
+      if (derived === "finished" && fm.status !== "finished") {
+        newCompletedDate = todayIso();
+        fmBlock = setFrontmatterStringField(fmBlock, "date_completed", `"${newCompletedDate}"`);
+      } else if (derived !== "finished" && fm.status === "finished") {
+        newCompletedDate = "";
+        fmBlock = setFrontmatterStringField(fmBlock, "date_completed", `""`);
+      }
+      return fmBlock + live.body;
     });
     if (newStatus) {
       fm.status = newStatus;
       statusSelect.value = newStatus;
+    }
+    if (newCompletedDate !== undefined) {
+      fm.date_completed = newCompletedDate;
+      if (completedInput) completedInput.value = newCompletedDate;
     }
   } catch (err) {
     console.error("Series Tracker: failed to auto-update status", err);

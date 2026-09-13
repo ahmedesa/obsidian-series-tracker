@@ -231,6 +231,25 @@
 .st-status-select {
   padding: 2px 6px;
 }
+.st-completed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+}
+.st-completed-input {
+  padding: 2px 6px;
+}
+.st-mood-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.st-mood-select {
+  padding: 2px 6px;
+}
 .st-status-hint {
   color: var(--text-faint);
   font-size: 0.8em;

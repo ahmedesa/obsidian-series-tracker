@@ -11,6 +11,7 @@ export {
   asStringArray,
   RATING_OPTIONS,
   extractDistinctGenres,
+  MOOD_OPTIONS,
 } from "./SeriesParser";
 import { asString, asStringArray } from "./SeriesParser";
 export type { FrontmatterSplit } from "./SeriesParser";
@@ -25,6 +26,7 @@ export interface MovieFrontmatter {
   genre: string[];
   date_added: string;
   date_completed: string;
+  mood: string;
 }
 
 /**
@@ -53,5 +55,6 @@ export function parseMovieFrontmatter(fm: Record<string, unknown>): MovieFrontma
     genre: asStringArray(fm.genre),
     date_added: asString(fm.date_added),
     date_completed: asString(fm.date_completed),
+    mood: asString(fm.mood),
   };
 }
