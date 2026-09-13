@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/ahmedesa/obsidian-series-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedesa/obsidian-series-tracker/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/ahmedesa/obsidian-series-tracker)](https://github.com/ahmedesa/obsidian-series-tracker/releases/latest)
+[![Obsidian community plugin](https://img.shields.io/badge/Obsidian-Community%20Plugin-8a63f2)](https://community.obsidian.md/plugins/series-tracker)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 An Obsidian plugin: a TrackSeries-style dashboard for TV series (episode
@@ -74,6 +75,8 @@ plugin resolves that to TMDb's internal id automatically whenever it needs
 to fetch data (via TMDb's `find` endpoint, cached permanently once resolved).
 
 ## Install
+
+Also listed on the [Obsidian community plugin directory](https://community.obsidian.md/plugins/series-tracker).
 
 1. In Obsidian: Settings → Community plugins → Browse → search
    "Series Tracker" → Install → Enable.
