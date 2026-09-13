@@ -216,3 +216,72 @@
   flex: 1;
   font-weight: 500;
 }
+.st-nextup-container {
+  margin-bottom: 20px;
+}
+.st-nextup-card {
+  display: flex;
+  gap: 16px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 12px;
+  align-items: flex-start;
+}
+.st-nextup-poster {
+  width: 80px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.st-nextup-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.st-nextup-show {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.st-nextup-episode {
+  font-weight: 700;
+  font-size: 1.1em;
+}
+.st-nextup-date {
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+.st-nextup-mark {
+  align-self: flex-start;
+  margin-top: 4px;
+  font-weight: 600;
+}
+.st-upcoming-container {
+  margin-top: 24px;
+}
+.st-upcoming-date-heading {
+  margin: 16px 0 6px;
+  font-size: 0.95em;
+  color: var(--text-muted);
+}
+.st-upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.st-upcoming-thumb {
+  width: 28px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.st-upcoming-show {
+  font-weight: 600;
+}
+.st-upcoming-episode {
+  color: var(--text-muted);
+}

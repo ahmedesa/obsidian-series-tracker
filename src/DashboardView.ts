@@ -1,10 +1,28 @@
-import { ItemView, WorkspaceLeaf, TFile, Notice } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Notice, requestUrl } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
-import { parseSeriesBody, parseFrontmatter, splitFrontmatter, ParsedSeries, STATUS_OPTIONS, statusLabel } from "./SeriesParser";
+import {
+  parseSeriesBody,
+  parseFrontmatter,
+  splitFrontmatter,
+  extractImdbId,
+  toggleEpisodeLine,
+  ParsedSeries,
+  STATUS_OPTIONS,
+  statusLabel,
+} from "./SeriesParser";
 import { renderShowDetail } from "./ShowDetailView";
 import { AddSeriesModal } from "./AddSeriesModal";
+import { OmdbClient, OmdbFetcher } from "./OmdbClient";
+import { todayIso } from "./dateUtil";
+import { UpcomingEpisode, findNextUp, findUpcoming, groupUpcomingByDate } from "./upcoming";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
+
+/** Routes OMDb requests through Obsidian's CORS-safe requestUrl API. */
+const obsidianOmdbFetcher: OmdbFetcher = async (url) => {
+  const res = await requestUrl({ url });
+  return { json: res.json };
+};
 
 export class DashboardView extends ItemView {
   plugin: SeriesTrackerPlugin;
@@ -154,6 +172,11 @@ export class DashboardView extends ItemView {
       new AddSeriesModal(this.app, this.plugin, () => this.render()).open();
     });
 
+    // Placeholder now; populated once the async OMDb air-date fetch below
+    // resolves. Reflects ALL tracked shows, independent of the filter/status
+    // controls above (those only affect the grid).
+    const nextUpContainer = container.createDiv({ cls: "st-nextup-container" });
+
     const filtered = all.filter(({ parsed }) => {
       if (this.filterStatus && parsed.frontmatter.status !== this.filterStatus) return false;
       if (this.filterText.trim() && !parsed.frontmatter.title.toLowerCase().includes(this.filterText.trim().toLowerCase())) {
@@ -207,6 +230,135 @@ export class DashboardView extends ItemView {
 
     if (filtered.length === 0 && all.length > 0) {
       grid.createEl("p", { cls: "st-empty-state", text: "No shows match the current filter." });
+    }
+
+    const upcomingContainer = container.createDiv({ cls: "st-upcoming-container" });
+
+    // Fetch air-date data for every unwatched episode across ALL tracked
+    // shows (cached, so repeat opens are cheap) and populate the Next Up
+    // spotlight + Upcoming list once it resolves. Never blocks the rest of
+    // the dashboard, which has already rendered above.
+    const fileByPath = new Map(all.map(({ file }) => [file.path, file]));
+    this.loadUpcomingCandidates(all)
+      .then((candidates) => {
+        if (generation !== this.renderGeneration) return;
+        this.renderNextUp(nextUpContainer, candidates, fileByPath);
+        this.renderUpcoming(upcomingContainer, candidates);
+      })
+      .catch((err) => {
+        console.error("Series Tracker: failed to load upcoming episodes", err);
+      });
+  }
+
+  /**
+   * Fetches OMDb season data (respecting the normal 24h cache) for every
+   * season that still has an unwatched episode, across every tracked show
+   * with a resolvable IMDb id. Returns one UpcomingEpisode per unwatched
+   * episode that OMDb has a release date for.
+   */
+  private async loadUpcomingCandidates(
+    all: { file: TFile; parsed: ParsedSeries }[],
+  ): Promise<UpcomingEpisode[]> {
+    const omdb = new OmdbClient(
+      this.plugin.settings.omdbApiKey,
+      this.plugin.settings.omdbCache,
+      async (c) => {
+        this.plugin.settings.omdbCache = c;
+        await this.plugin.saveSettings();
+      },
+      obsidianOmdbFetcher,
+    );
+
+    const candidates: UpcomingEpisode[] = [];
+
+    for (const { file, parsed } of all) {
+      const imdbId = extractImdbId(parsed.frontmatter.source_url);
+      if (!imdbId) continue;
+
+      for (const season of parsed.seasons) {
+        const unwatched = season.episodes.filter((e) => !e.watched);
+        if (unwatched.length === 0) continue;
+
+        const data = await omdb.getSeason(imdbId, season.number);
+        if (!data) continue;
+
+        for (const ep of unwatched) {
+          const omdbEp = data.episodes.find((e) => e.episode === ep.number);
+          if (!omdbEp || !omdbEp.released || omdbEp.released === "N/A") continue;
+          candidates.push({
+            showTitle: parsed.frontmatter.title,
+            showImage: parsed.frontmatter.image,
+            filePath: file.path,
+            season: season.number,
+            episode: ep.number,
+            title: omdbEp.title,
+            released: omdbEp.released,
+            lineIndex: ep.lineIndex,
+          });
+        }
+      }
+    }
+
+    return candidates;
+  }
+
+  private renderNextUp(
+    container: HTMLElement,
+    candidates: UpcomingEpisode[],
+    fileByPath: Map<string, TFile>,
+  ): void {
+    container.empty();
+    const nextUp = findNextUp(candidates);
+    if (!nextUp) return;
+
+    const card = container.createDiv({ cls: "st-nextup-card" });
+    if (nextUp.showImage) {
+      card.createEl("img", { cls: "st-nextup-poster", attr: { src: nextUp.showImage } });
+    }
+    const info = card.createDiv({ cls: "st-nextup-info" });
+    info.createDiv({ cls: "st-nextup-show", text: nextUp.showTitle });
+    const epNum = `S${nextUp.season}E${String(nextUp.episode).padStart(2, "0")}`;
+    info.createDiv({ cls: "st-nextup-episode", text: `${epNum} — ${nextUp.title}` });
+    info.createDiv({ cls: "st-nextup-date", text: nextUp.released });
+
+    const markBtn = info.createEl("button", { cls: "st-nextup-mark", text: "Mark as watched" });
+    markBtn.addEventListener("click", async () => {
+      const file = fileByPath.get(nextUp.filePath);
+      if (!file) return;
+      markBtn.disabled = true;
+      try {
+        const stamp = todayIso();
+        await this.app.vault.process(file, (data) => {
+          const live = splitFrontmatter(data);
+          const lines = toggleEpisodeLine(live.body.split("\n"), nextUp.lineIndex, true, stamp);
+          return live.frontmatterBlock + lines.join("\n");
+        });
+        this.render();
+      } catch (err) {
+        markBtn.disabled = false;
+        console.error("Series Tracker: failed to mark episode watched", err);
+        new Notice(`Series Tracker: failed to update episode — ${errorMessage(err)}`);
+      }
+    });
+  }
+
+  private renderUpcoming(container: HTMLElement, candidates: UpcomingEpisode[]): void {
+    container.empty();
+    const upcoming = findUpcoming(candidates);
+    if (upcoming.length === 0) return;
+
+    container.createEl("h3", { text: "Upcoming" });
+    for (const group of groupUpcomingByDate(upcoming)) {
+      container.createEl("h4", { cls: "st-upcoming-date-heading", text: group.dateLabel });
+      for (const ep of group.episodes) {
+        const row = container.createDiv({ cls: "st-upcoming-row" });
+        if (ep.showImage) {
+          row.createEl("img", { cls: "st-upcoming-thumb", attr: { src: ep.showImage } });
+        }
+        const epNum = `S${ep.season}E${String(ep.episode).padStart(2, "0")}`;
+        row.createSpan({ cls: "st-upcoming-show", text: ep.showTitle });
+        row.createSpan({ cls: "st-upcoming-episode", text: ` ${epNum} — ${ep.title}` });
+      }
     }
   }
 
