@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf, TFile } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
 import { parseSeriesBody, parseFrontmatter, ParsedSeries } from "./SeriesParser";
+import { renderShowDetail } from "./ShowDetailView";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
 
@@ -123,7 +124,7 @@ export class DashboardView extends ItemView {
       this.render();
     });
 
-    container.createEl("p", { text: `Detail view for ${file.basename} — wired in Task 6.` });
+    await renderShowDetail(container, this.app, this.plugin, file, () => this.render());
   }
 
   async onClose() {}
