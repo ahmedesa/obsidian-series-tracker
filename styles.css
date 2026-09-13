@@ -378,6 +378,43 @@
   border-radius: 3px;
   flex-shrink: 0;
 }
+.st-recommend-container {
+  margin-top: 24px;
+}
+.st-recommend-strip {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.st-recommend-card {
+  flex: 0 0 130px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  overflow: hidden;
+  padding-bottom: 8px;
+}
+.st-recommend-poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  display: block;
+}
+.st-recommend-title {
+  font-weight: 600;
+  font-size: 0.85em;
+  padding: 6px 8px 0;
+}
+.st-recommend-rating {
+  color: var(--text-accent);
+  font-size: 0.8em;
+  padding: 2px 8px 0;
+}
+.st-recommend-add {
+  margin: 6px 8px 0;
+  font-size: 0.8em;
+  padding: 2px 8px;
+}
 .st-recently-watched-info {
   flex: 1;
 }

@@ -14,11 +14,12 @@ import {
 } from "./SeriesParser";
 import { renderShowDetail } from "./ShowDetailView";
 import { AddSeriesModal } from "./AddSeriesModal";
-import { TmdbClient, TmdbFetcher, parseRuntimeMinutes } from "./TmdbClient";
+import { TmdbClient, TmdbFetcher, TmdbSearchResult, parseRuntimeMinutes } from "./TmdbClient";
 import { todayIso, formatDurationMinutes } from "./dateUtil";
 import { UpcomingEpisode, findNextUp, findUpcoming, groupUpcomingByDate } from "./upcoming";
 import { findRecentlyWatched } from "./recentlyWatched";
 import { pruneOmdbCache } from "./cachePrune";
+import { topRatedGenres, excludeTracked, normalizeTitle } from "./recommendations";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
 
@@ -323,6 +324,19 @@ export class DashboardView extends ItemView {
       })),
     );
 
+    // Recommendations — based on the user's own rating history, so it's
+    // fetched/rendered last and stays empty (no heading) until something
+    // rated exists. Never blocks the rest of the dashboard.
+    const recommendContainer = container.createDiv({ cls: "st-recommend-container" });
+    this.loadRecommendations(all)
+      .then((candidates) => {
+        if (generation !== this.renderGeneration) return;
+        this.renderRecommendations(recommendContainer, candidates);
+      })
+      .catch((err) => {
+        console.error("Series Tracker: failed to load recommendations", err);
+      });
+
     // Fetch air-date data for every unwatched episode across ALL tracked
     // shows (cached, so repeat opens are cheap) and populate the Next Up
     // spotlight + Upcoming list once it resolves. Never blocks the rest of
@@ -418,6 +432,55 @@ export class DashboardView extends ItemView {
       info.createSpan({ cls: "st-recently-watched-show", text: entry.showTitle });
       info.createSpan({ cls: "st-recently-watched-episode", text: ` ${epNum} — ${entry.title}` });
       row.createSpan({ cls: "st-recently-watched-date", text: entry.watchedDate });
+    }
+  }
+
+  /**
+   * Popular unwatched titles in the user's top-rated genres (via TMDb
+   * discover), excluding anything already tracked. Returns [] if nothing
+   * is rated yet, or if genre names can't be mapped to TMDb ids — either
+   * way the caller renders nothing, not an empty/error state.
+   */
+  private async loadRecommendations(all: { file: TFile; parsed: ParsedSeries }[]): Promise<TmdbSearchResult[]> {
+    const topGenres = topRatedGenres(
+      all.map(({ parsed }) => ({ genres: parsed.frontmatter.tags, rating: parsed.frontmatter.rating })),
+    );
+    if (topGenres.length === 0) return [];
+
+    const tmdb = new TmdbClient(
+      this.plugin.settings.tmdbApiKey,
+      this.plugin.settings.tmdbCache,
+      async (c) => {
+        this.plugin.settings.tmdbCache = c;
+        await this.plugin.saveSettings();
+      },
+      obsidianTmdbFetcher,
+    );
+
+    const genreMap = await tmdb.getGenreMap("series");
+    const genreIds = topGenres.map((g) => genreMap[g]).filter((id): id is number => typeof id === "number");
+    if (genreIds.length === 0) return [];
+
+    const discovered = await tmdb.discover("series", genreIds);
+    const trackedTitles = new Set(all.map(({ parsed }) => normalizeTitle(parsed.frontmatter.title)));
+    return excludeTracked(discovered, trackedTitles).slice(0, 8);
+  }
+
+  private renderRecommendations(container: HTMLElement, candidates: TmdbSearchResult[]): void {
+    container.empty();
+    if (candidates.length === 0) return;
+
+    container.createEl("h3", { text: "Recommended for you" });
+    const strip = container.createDiv({ cls: "st-recommend-strip" });
+    for (const r of candidates) {
+      const card = strip.createDiv({ cls: "st-recommend-card" });
+      if (r.poster) card.createEl("img", { cls: "st-recommend-poster", attr: { src: r.poster } });
+      card.createDiv({ cls: "st-recommend-title", text: `${r.title} (${r.year})` });
+      if (r.rating) card.createDiv({ cls: "st-recommend-rating", text: `★ ${r.rating}` });
+      const addBtn = card.createEl("button", { cls: "st-recommend-add", text: "+ Add" });
+      addBtn.addEventListener("click", () => {
+        new AddSeriesModal(this.app, this.plugin, () => void this.render(), r).open();
+      });
     }
   }
 

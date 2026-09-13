@@ -14,11 +14,19 @@ export class AddMovieModal extends Modal {
   private plugin: SeriesTrackerPlugin;
   private onAdded: () => void;
   private resultsEl!: HTMLElement;
+  private preloadedResult?: TmdbSearchResult;
 
-  constructor(app: App, plugin: SeriesTrackerPlugin, onAdded: () => void) {
+  /**
+   * `preloadedResult` skips straight to a single pre-filled result (still
+   * requiring the user's own "Add" click to confirm) — used by the
+   * recommendations panel so suggesting a title doesn't need to duplicate
+   * `createMovieNote`/re-implement search.
+   */
+  constructor(app: App, plugin: SeriesTrackerPlugin, onAdded: () => void, preloadedResult?: TmdbSearchResult) {
     super(app);
     this.plugin = plugin;
     this.onAdded = onAdded;
+    this.preloadedResult = preloadedResult;
   }
 
   private newClient(): TmdbClient {
@@ -46,6 +54,10 @@ export class AddMovieModal extends Modal {
     const searchBtn = searchRow.createEl("button", { text: "Search" });
 
     this.resultsEl = contentEl.createDiv({ cls: "st-modal-results" });
+
+    if (this.preloadedResult) {
+      this.renderResults([this.preloadedResult], this.newClient());
+    }
 
     const runSearch = async () => {
       const title = input.value.trim();
