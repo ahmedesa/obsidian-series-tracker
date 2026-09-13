@@ -18,6 +18,7 @@ export interface SeriesFrontmatter {
   image: string;
   source_url: string;
   date_added: string;
+  tags: string[];
 }
 
 /**
@@ -233,7 +234,26 @@ export function parseFrontmatter(fm: Record<string, unknown>): SeriesFrontmatter
     image: asString(fm.image),
     source_url: asString(fm.source_url),
     date_added: asString(fm.date_added),
+    tags: asStringArray(fm.tags),
   };
+}
+
+/** Rating dropdown values: 0-5 in 0.5 steps, e.g. [0, 0.5, 1, 1.5, ..., 5]. */
+export const RATING_OPTIONS: number[] = Array.from({ length: 11 }, (_, i) => i * 0.5);
+
+/**
+ * Distinct genre/tag values across every tracked show or movie, sorted
+ * alphabetically — feeds the dashboard's genre filter dropdown. Built from
+ * what the user actually has, not a hardcoded TMDb genre list.
+ */
+export function extractDistinctGenres(genreLists: string[][]): string[] {
+  const set = new Set<string>();
+  for (const list of genreLists) {
+    for (const g of list) {
+      if (g.trim()) set.add(g.trim());
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
 }
 
 /** Strips trailing slashes so `"Media/Series/"` and `"Media/Series"` match identically. */

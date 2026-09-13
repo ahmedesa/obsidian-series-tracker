@@ -24,3 +24,15 @@ export function isAired(released: string | null | undefined, now: number = Date.
   const t = parseLocalDate(released);
   return t !== null && t <= now;
 }
+
+/** e.g. 90 -> "1h 30m", 1500 -> "1d 1h", 45 -> "45m". */
+export function formatDurationMinutes(totalMinutes: number): string {
+  if (totalMinutes <= 0) return "0m";
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  return `${minutes}m`;
+}

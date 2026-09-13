@@ -14,6 +14,8 @@ import {
   deriveStatus,
   normalizeFolderPath,
   parseImdbId,
+  RATING_OPTIONS,
+  extractDistinctGenres,
 } from "../src/SeriesParser";
 
 describe("parseSeriesBody", () => {
@@ -332,5 +334,30 @@ describe("stripWatchedDate", () => {
       title: "Pilot",
       watchedDate: "2026-09-13",
     });
+  });
+});
+
+describe("RATING_OPTIONS", () => {
+  it("is 0-5 in 0.5 steps", () => {
+    expect(RATING_OPTIONS).toEqual([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]);
+  });
+});
+
+describe("extractDistinctGenres", () => {
+  it("returns distinct, sorted genres across all lists", () => {
+    expect(extractDistinctGenres([["Drama", "Action"], ["Comedy"], ["Action"]])).toEqual([
+      "Action",
+      "Comedy",
+      "Drama",
+    ]);
+  });
+
+  it("ignores blank/whitespace-only entries", () => {
+    expect(extractDistinctGenres([["Drama", "", "  "]])).toEqual(["Drama"]);
+  });
+
+  it("returns [] for no input", () => {
+    expect(extractDistinctGenres([])).toEqual([]);
+    expect(extractDistinctGenres([[]])).toEqual([]);
   });
 });

@@ -15,6 +15,7 @@ import {
   MANUAL_ONLY_STATUS,
   STATUS_OPTIONS,
   SeriesFrontmatter,
+  RATING_OPTIONS,
 } from "./SeriesParser";
 import { todayIso, isAired } from "./dateUtil";
 import { TmdbClient, TmdbFetcher } from "./TmdbClient";
@@ -89,18 +90,19 @@ export async function renderShowDetail(
     const episodeAirDates = new Map<string, string>();
     let seriesEndedFlag: boolean | undefined;
 
-    // Personal rating — dropdown 0-5 (plus "Unrated"), written back to the
-    // `rating` frontmatter field (mirrors the Movies notes' rating convention).
+    // Personal rating — dropdown 0-5 in 0.5 steps (plus "Unrated"), written
+    // back to the `rating` frontmatter field (mirrors the Movies notes'
+    // rating convention).
     const ratingRow = container.createDiv({ cls: "st-rating-row" });
     ratingRow.createSpan({ text: "Your rating: " });
     const ratingSelect = ratingRow.createEl("select", { cls: "st-rating-select" });
     ratingSelect.createEl("option", { value: "", text: "Unrated" });
-    for (let i = 0; i <= 5; i++) {
-      ratingSelect.createEl("option", { value: String(i), text: String(i) });
+    for (const r of RATING_OPTIONS) {
+      ratingSelect.createEl("option", { value: String(r), text: String(r) });
     }
     ratingSelect.value = fm.rating !== null ? String(fm.rating) : "";
     const handleRatingChange = async () => {
-      const next = ratingSelect.value === "" ? null : parseInt(ratingSelect.value, 10);
+      const next = ratingSelect.value === "" ? null : parseFloat(ratingSelect.value);
       const previous = fm.rating;
       try {
         await app.vault.process(file, (data) => {

@@ -9,6 +9,8 @@ export {
   parseImdbId,
   asString,
   asStringArray,
+  RATING_OPTIONS,
+  extractDistinctGenres,
 } from "./SeriesParser";
 import { asString, asStringArray } from "./SeriesParser";
 export type { FrontmatterSplit } from "./SeriesParser";
