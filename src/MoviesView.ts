@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile, Notice, requestUrl } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Notice } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
 import {
   MovieFrontmatter,
@@ -16,19 +16,14 @@ import {
   extractDistinctGenres,
 } from "./MovieParser";
 import { AddMovieModal } from "./AddMovieModal";
-import { TmdbClient, TmdbFetcher, TmdbSearchResult, parseRuntimeMinutes } from "./TmdbClient";
+import { createMetadataProvider, MetadataProvider, MetadataSearchResult } from "./MetadataProvider";
+import { parseRuntimeMinutes } from "./TmdbClient";
 import { todayIso, formatDurationMinutes } from "./dateUtil";
 import { ConfirmModal } from "./ConfirmModal";
 import { pruneOmdbCache } from "./cachePrune";
 import { topRatedGenres, excludeTracked, normalizeTitle } from "./recommendations";
 
 export const VIEW_TYPE_MOVIES = "series-tracker-movies";
-
-/** Routes TMDb requests through Obsidian's CORS-safe requestUrl API. */
-const obsidianTmdbFetcher: TmdbFetcher = async (url) => {
-  const res = await requestUrl({ url });
-  return { json: res.json };
-};
 
 interface ParsedMovie {
   frontmatter: MovieFrontmatter;
@@ -82,6 +77,13 @@ export class MoviesView extends ItemView {
     if (this.currentFile) return file.path === this.currentFile.path;
     const folder = normalizeFolderPath(this.plugin.settings.moviesFolder);
     return file.path.startsWith(folder + "/");
+  }
+
+  private newProvider(): MetadataProvider {
+    return createMetadataProvider(this.plugin.settings, async (c) => {
+      this.plugin.settings.tmdbCache = c;
+      await this.plugin.saveSettings();
+    });
   }
 
   async loadAllMovies(): Promise<{ file: TFile; parsed: ParsedMovie }[]> {
@@ -237,15 +239,7 @@ export class MoviesView extends ItemView {
     const tile4Value = tile4.createDiv({ cls: "st-tile-value", text: "—" });
     tile4.createDiv({ cls: "st-tile-label", text: "Time spent watching" });
 
-    const providersTmdb = new TmdbClient(
-      this.plugin.settings.tmdbApiKey,
-      this.plugin.settings.tmdbCache,
-      async (c) => {
-        this.plugin.settings.tmdbCache = c;
-        await this.plugin.saveSettings();
-      },
-      obsidianTmdbFetcher,
-    );
+    const providersTmdb = this.newProvider();
 
     const grid = container.createDiv({ cls: "st-grid" });
     for (const { file, parsed } of filtered) {
@@ -266,7 +260,7 @@ export class MoviesView extends ItemView {
       if (imdbId) {
         const badges = card.createDiv({ cls: "st-card-providers" });
         providersTmdb
-          .getWatchProvidersByImdbId(imdbId, this.plugin.settings.streamingCountry)
+          .getWatchProvidersByExternalId(imdbId, this.plugin.settings.streamingCountry)
           .then((providers) => {
             if (generation !== this.renderGeneration) return;
             for (const p of providers.slice(0, 4)) {
@@ -318,22 +312,14 @@ export class MoviesView extends ItemView {
    * (missing/unparsable) contribute 0, not an error.
    */
   private async loadTimeSpentMinutes(movies: { file: TFile; parsed: ParsedMovie }[]): Promise<number> {
-    const tmdb = new TmdbClient(
-      this.plugin.settings.tmdbApiKey,
-      this.plugin.settings.tmdbCache,
-      async (c) => {
-        this.plugin.settings.tmdbCache = c;
-        await this.plugin.saveSettings();
-      },
-      obsidianTmdbFetcher,
-    );
+    const tmdb = this.newProvider();
 
     const perMovieMinutes = await Promise.all(
       movies.map(async ({ parsed }) => {
         if (parsed.frontmatter.status !== "watched") return 0;
         const imdbId = extractImdbId(parsed.frontmatter.source_url);
         if (!imdbId) return 0;
-        const info = await tmdb.getDetailsByImdbId(imdbId);
+        const info = await tmdb.getDetailsByExternalId(imdbId);
         return parseRuntimeMinutes(info?.runtime);
       }),
     );
@@ -346,21 +332,13 @@ export class MoviesView extends ItemView {
    * discover), excluding anything already tracked. Returns [] if nothing
    * is rated yet, or if genre names can't be mapped to TMDb ids.
    */
-  private async loadRecommendations(all: { file: TFile; parsed: ParsedMovie }[]): Promise<TmdbSearchResult[]> {
+  private async loadRecommendations(all: { file: TFile; parsed: ParsedMovie }[]): Promise<MetadataSearchResult[]> {
     const topGenres = topRatedGenres(
       all.map(({ parsed }) => ({ genres: parsed.frontmatter.genre, rating: parsed.frontmatter.rating })),
     );
     if (topGenres.length === 0) return [];
 
-    const tmdb = new TmdbClient(
-      this.plugin.settings.tmdbApiKey,
-      this.plugin.settings.tmdbCache,
-      async (c) => {
-        this.plugin.settings.tmdbCache = c;
-        await this.plugin.saveSettings();
-      },
-      obsidianTmdbFetcher,
-    );
+    const tmdb = this.newProvider();
 
     const genreMap = await tmdb.getGenreMap("movie");
     const genreIds = topGenres.map((g) => genreMap[g]).filter((id): id is number => typeof id === "number");
@@ -371,7 +349,7 @@ export class MoviesView extends ItemView {
     return excludeTracked(discovered, trackedTitles).slice(0, 8);
   }
 
-  private renderRecommendations(container: HTMLElement, candidates: TmdbSearchResult[]): void {
+  private renderRecommendations(container: HTMLElement, candidates: MetadataSearchResult[]): void {
     container.empty();
     if (candidates.length === 0) return;
 
@@ -537,16 +515,8 @@ export class MoviesView extends ItemView {
       const imdbId = extractImdbId(fm.source_url);
 
       if (imdbId) {
-        const tmdb = new TmdbClient(
-          this.plugin.settings.tmdbApiKey,
-          this.plugin.settings.tmdbCache,
-          async (c) => {
-            this.plugin.settings.tmdbCache = c;
-            await this.plugin.saveSettings();
-          },
-          obsidianTmdbFetcher,
-        );
-        const info = await tmdb.getDetailsByImdbId(imdbId);
+        const tmdb = this.newProvider();
+        const info = await tmdb.getDetailsByExternalId(imdbId);
         if (!isCurrent()) return;
         if (info) {
           const panel = container.createDiv({ cls: "st-info-panel" });

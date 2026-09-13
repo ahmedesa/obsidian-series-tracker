@@ -140,7 +140,7 @@ export function parseSeriesBody(body: string): Season[] {
   return seasons;
 }
 
-export interface TmdbSeasonEpisodes {
+export interface SeasonEpisodesInput {
   number: number;
   episodes: { episode: number; title: string }[];
 }
@@ -158,7 +158,7 @@ export interface MergeResult {
  * season not already present. Never touches existing lines — watched
  * state and watched dates on already-tracked episodes are untouched.
  */
-export function mergeNewEpisodes(body: string, seasonsData: TmdbSeasonEpisodes[]): MergeResult {
+export function mergeNewEpisodes(body: string, seasonsData: SeasonEpisodesInput[]): MergeResult {
   const lines = body.split("\n");
   let episodesAdded = 0;
   let seasonsAdded = 0;

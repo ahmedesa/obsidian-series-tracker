@@ -1,72 +1,31 @@
-export interface TmdbEpisode {
-  title: string;
-  episode: number;
-  released: string;
-  /** TMDb's own 0-10 vote average, formatted to 1 decimal. Not an IMDb rating. */
-  rating: string;
-}
-
-export interface TmdbSeasonResponse {
-  season: number;
-  episodes: TmdbEpisode[];
-}
-
-export interface TmdbSeriesInfo {
-  title: string;
-  year: string;
-  plot: string;
-  /** Always "" — TMDb's content rating needs a separate endpoint we don't fetch. */
-  rated: string;
-  runtime: string;
-  country: string;
-  /** Always "" — TMDb has no awards data. */
-  awards: string;
-  /** TMDb's own 0-10 vote average, formatted to 1 decimal. Not IMDb's rating. */
-  imdbRating: string;
-  genre: string;
-  poster: string;
-  totalSeasons: number;
-  seriesEnded: boolean;
-  type: string;
-  /** From TMDb's `external_ids.imdb_id` — "" if TMDb has no linked IMDb entry. */
-  imdbId: string;
-  tmdbId: number;
-}
-
-export interface TmdbWatchProvider {
-  name: string;
-  logo: string;
-}
-
-export interface TmdbSearchResult {
-  tmdbId: number;
-  title: string;
-  year: string;
-  poster: string;
-  /** TMDb's own 0-10 vote average, formatted to 1 decimal. "" if unrated. */
-  rating: string;
-  /** Short plot summary, as returned by TMDb's search endpoint. */
-  plot: string;
-}
+import type {
+  MetadataProvider,
+  MetadataEpisode,
+  MetadataSeason,
+  MetadataDetails,
+  WatchProvider,
+  MetadataSearchResult,
+  ResolvedExternalId,
+} from "./MetadataProvider";
 
 interface DetailsCacheEntry {
   fetchedAt: number;
-  data: TmdbSeriesInfo;
+  data: MetadataDetails;
 }
 
 interface SeasonCacheEntry {
   fetchedAt: number;
-  data: TmdbSeasonResponse;
+  data: MetadataSeason;
 }
 
 interface ResolveCacheEntry {
   fetchedAt: number;
-  data: { tmdbId: number; mediaType: "series" | "movie" };
+  data: ResolvedExternalId;
 }
 
 interface ProvidersCacheEntry {
   fetchedAt: number;
-  data: TmdbWatchProvider[];
+  data: WatchProvider[];
 }
 
 interface GenreMapCacheEntry {
@@ -76,7 +35,7 @@ interface GenreMapCacheEntry {
 
 interface DiscoverCacheEntry {
   fetchedAt: number;
-  data: TmdbSearchResult[];
+  data: MetadataSearchResult[];
 }
 
 export type CacheEntry =
@@ -121,7 +80,7 @@ function formatVote(vote: number | undefined | null): string {
 }
 
 /** Shared by `searchTitles` and `discover` — both TMDb endpoints return the same result shape. */
-function mapSearchEntries(json: unknown, mediaType: "series" | "movie"): TmdbSearchResult[] {
+function mapSearchEntries(json: unknown, mediaType: "series" | "movie"): MetadataSearchResult[] {
   if (mediaType === "series") {
     const raw = json as TmdbRawSearchResponse<TmdbRawSearchTvEntry>;
     return (raw.results ?? []).map((r) => ({
@@ -248,7 +207,8 @@ interface TmdbRawWatchProvidersResponse {
 export type TmdbFetcher = (url: string) => Promise<{ json: unknown }>;
 
 /**
- * TMDb-backed metadata client. Notes keep storing an IMDb URL in
+ * TMDb-backed implementation of `MetadataProvider` — see that interface for
+ * the provider-agnostic contract. Notes keep storing an IMDb URL in
  * `source_url` (unchanged frontmatter shape, so existing vaults don't
  * break), but TMDb identifies shows/movies by its own numeric id — so every
  * lookup that starts from a stored IMDb id first resolves it to a TMDb id
@@ -261,11 +221,14 @@ export type TmdbFetcher = (url: string) => Promise<{ json: unknown }>;
  *
  * The tmdbId-based methods (`getDetails`/`getSeason`) are intentionally
  * uncached — they're only used once, right after a search/ID-add, to build
- * a brand-new note. The imdbId-based wrappers (`getDetailsByImdbId`/
- * `getSeasonByImdbId`) are the repeated-access hot path (dashboard renders,
- * refresh) and carry the persistent 24h cache.
+ * a brand-new note. The externalId-based wrappers (`getDetailsByExternalId`/
+ * `getSeasonByExternalId`) are the repeated-access hot path (dashboard
+ * renders, refresh) and carry the persistent 24h cache.
  */
-export class TmdbClient {
+export class TmdbClient implements MetadataProvider {
+  readonly id = "tmdb";
+  readonly displayName = "TMDb";
+
   constructor(
     private apiKey: string,
     private cache: Record<string, CacheEntry>,
@@ -274,7 +237,7 @@ export class TmdbClient {
   ) {}
 
   /** One-off title search, not cached (queries vary too much to be worth caching). */
-  async searchTitles(title: string, mediaType: "series" | "movie"): Promise<TmdbSearchResult[]> {
+  async search(title: string, mediaType: "series" | "movie"): Promise<MetadataSearchResult[]> {
     if (!this.apiKey || !title.trim()) return [];
     const path = mediaType === "series" ? "tv" : "movie";
     try {
@@ -287,7 +250,7 @@ export class TmdbClient {
   }
 
   /** Fetches full details for a known TMDb id. Not cached — see class doc. */
-  async getDetails(tmdbId: number, mediaType: "series" | "movie"): Promise<TmdbSeriesInfo | null> {
+  async getDetails(tmdbId: number, mediaType: "series" | "movie"): Promise<MetadataDetails | null> {
     if (!this.apiKey) return null;
     try {
       if (mediaType === "series") {
@@ -340,7 +303,7 @@ export class TmdbClient {
   }
 
   /** Fetches one season's episodes for a known TMDb id. Not cached — see class doc. */
-  async getSeason(tmdbId: number, season: number): Promise<TmdbSeasonResponse | null> {
+  async getSeason(tmdbId: number, season: number): Promise<MetadataSeason | null> {
     if (!this.apiKey) return null;
     try {
       const url = `${TMDB_API_BASE}/tv/${tmdbId}/season/${season}?api_key=${this.apiKey}`;
@@ -366,7 +329,7 @@ export class TmdbClient {
     tmdbId: number,
     mediaType: "series" | "movie",
     country: string,
-  ): Promise<TmdbWatchProvider[]> {
+  ): Promise<WatchProvider[]> {
     if (!this.apiKey) return [];
     const path = mediaType === "series" ? "tv" : "movie";
     try {
@@ -385,7 +348,7 @@ export class TmdbClient {
    * `find/{imdb_id}`. Cached permanently under `<imdbId>:resolve` — this
    * mapping never changes, so unlike the other caches there's no TTL check.
    */
-  async resolveFromImdbId(imdbId: string): Promise<{ tmdbId: number; mediaType: "series" | "movie" } | null> {
+  async resolveExternalId(imdbId: string): Promise<ResolvedExternalId | null> {
     const key = `${imdbId}:resolve`;
     const cached = this.cache[key];
     if (cached) return (cached as ResolveCacheEntry).data;
@@ -396,7 +359,7 @@ export class TmdbClient {
       const { json } = await this.fetcher(url);
       const raw = json as TmdbRawFindResponse;
 
-      let result: { tmdbId: number; mediaType: "series" | "movie" } | null = null;
+      let result: ResolvedExternalId | null = null;
       if (raw.tv_results && raw.tv_results.length > 0) {
         result = { tmdbId: raw.tv_results[0].id, mediaType: "series" };
       } else if (raw.movie_results && raw.movie_results.length > 0) {
@@ -413,14 +376,14 @@ export class TmdbClient {
   }
 
   /** Cached (24h), imdbId-based details lookup — the dashboard/detail-view hot path. */
-  async getDetailsByImdbId(imdbId: string, forceRefresh = false): Promise<TmdbSeriesInfo | null> {
+  async getDetailsByExternalId(imdbId: string, forceRefresh = false): Promise<MetadataDetails | null> {
     const key = `${imdbId}:series`;
     const cached = this.cache[key];
     if (!forceRefresh && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       return (cached as DetailsCacheEntry).data;
     }
 
-    const resolved = await this.resolveFromImdbId(imdbId);
+    const resolved = await this.resolveExternalId(imdbId);
     if (!resolved) return (cached as DetailsCacheEntry | undefined)?.data ?? null;
 
     const info = await this.getDetails(resolved.tmdbId, resolved.mediaType);
@@ -432,14 +395,14 @@ export class TmdbClient {
   }
 
   /** Cached (24h), imdbId-based season lookup — the dashboard/detail-view hot path. */
-  async getSeasonByImdbId(imdbId: string, season: number, forceRefresh = false): Promise<TmdbSeasonResponse | null> {
+  async getSeasonByExternalId(imdbId: string, season: number, forceRefresh = false): Promise<MetadataSeason | null> {
     const key = `${imdbId}:${season}`;
     const cached = this.cache[key];
     if (!forceRefresh && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       return (cached as SeasonCacheEntry).data;
     }
 
-    const resolved = await this.resolveFromImdbId(imdbId);
+    const resolved = await this.resolveExternalId(imdbId);
     if (!resolved || resolved.mediaType !== "series") return (cached as SeasonCacheEntry | undefined)?.data ?? null;
 
     const data = await this.getSeason(resolved.tmdbId, season);
@@ -451,14 +414,14 @@ export class TmdbClient {
   }
 
   /** Cached (24h), imdbId-based watch-providers lookup — the dashboard hot path. */
-  async getWatchProvidersByImdbId(imdbId: string, country: string): Promise<TmdbWatchProvider[]> {
+  async getWatchProvidersByExternalId(imdbId: string, country: string): Promise<WatchProvider[]> {
     const key = `${imdbId}:providers:${country.toUpperCase()}`;
     const cached = this.cache[key];
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       return (cached as ProvidersCacheEntry).data;
     }
 
-    const resolved = await this.resolveFromImdbId(imdbId);
+    const resolved = await this.resolveExternalId(imdbId);
     if (!resolved) return (cached as ProvidersCacheEntry | undefined)?.data ?? [];
 
     const data = await this.getWatchProviders(resolved.tmdbId, resolved.mediaType, country);
@@ -499,7 +462,7 @@ export class TmdbClient {
    * sorted by popularity. Cached 24h under `discover:<mediaType>:<genreIds>`
    * — the same cache pattern as every other lookup in this client.
    */
-  async discover(mediaType: "series" | "movie", genreIds: number[]): Promise<TmdbSearchResult[]> {
+  async discover(mediaType: "series" | "movie", genreIds: number[]): Promise<MetadataSearchResult[]> {
     if (genreIds.length === 0) return [];
     const key = `discover:${mediaType}:${[...genreIds].sort((a, b) => a - b).join(",")}`;
     const cached = this.cache[key];

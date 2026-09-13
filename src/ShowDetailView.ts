@@ -1,4 +1,4 @@
-import { App, TFile, Notice, requestUrl } from "obsidian";
+import { App, TFile, Notice } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
 import {
   parseSeriesBody,
@@ -18,14 +18,15 @@ import {
   RATING_OPTIONS,
 } from "./SeriesParser";
 import { todayIso, isAired } from "./dateUtil";
-import { TmdbClient, TmdbFetcher } from "./TmdbClient";
+import { createMetadataProvider, MetadataProvider } from "./MetadataProvider";
 import { ConfirmModal } from "./ConfirmModal";
 
-/** Routes TMDb requests through Obsidian's CORS-safe requestUrl API. */
-const obsidianTmdbFetcher: TmdbFetcher = async (url) => {
-  const res = await requestUrl({ url });
-  return { json: res.json };
-};
+function newProvider(plugin: SeriesTrackerPlugin): MetadataProvider {
+  return createMetadataProvider(plugin.settings, async (c) => {
+    plugin.settings.tmdbCache = c;
+    await plugin.saveSettings();
+  });
+}
 
 export async function renderShowDetail(
   container: Element,
@@ -142,21 +143,13 @@ export async function renderShowDetail(
       refreshBtn.disabled = true;
       refreshBtn.textContent = "Refreshing…";
       try {
-        const freshTmdb = new TmdbClient(
-          plugin.settings.tmdbApiKey,
-          plugin.settings.tmdbCache,
-          async (c) => {
-            plugin.settings.tmdbCache = c;
-            await plugin.saveSettings();
-          },
-          obsidianTmdbFetcher,
-        );
-        const freshInfo = await freshTmdb.getDetailsByImdbId(liveImdbId, true);
+        const freshTmdb = newProvider(plugin);
+        const freshInfo = await freshTmdb.getDetailsByExternalId(liveImdbId, true);
         const seasonCount = Math.min(freshInfo?.totalSeasons || seasons.length || 1, 25);
 
         const fetched = await Promise.all(
           Array.from({ length: seasonCount }, (_, i) => i + 1).map(async (n) => {
-            const data = await freshTmdb.getSeasonByImdbId(liveImdbId, n, true);
+            const data = await freshTmdb.getSeasonByExternalId(liveImdbId, n, true);
             return data ? { number: n, data } : null;
           }),
         );
@@ -205,20 +198,12 @@ export async function renderShowDetail(
     };
     refreshBtn.addEventListener("click", () => void handleRefresh());
 
-    const tmdb = new TmdbClient(
-      plugin.settings.tmdbApiKey,
-      plugin.settings.tmdbCache,
-      async (c) => {
-        plugin.settings.tmdbCache = c;
-        await plugin.saveSettings();
-      },
-      obsidianTmdbFetcher,
-    );
+    const tmdb = newProvider(plugin);
 
     // Series-level info panel (plot/rated/runtime/country/awards/rating) —
     // fetched and rendered before the episode lists, but never blocks them.
     if (imdbId) {
-      const info = await tmdb.getDetailsByImdbId(imdbId);
+      const info = await tmdb.getDetailsByExternalId(imdbId);
       if (!isCurrent()) return;
       seriesEndedFlag = info?.seriesEnded;
       if (info) {
@@ -350,7 +335,7 @@ export async function renderShowDetail(
 
     const seasonResults = await Promise.all(
       seasons.map(async (season) => {
-        const data = await tmdb.getSeasonByImdbId(imdbId, season.number);
+        const data = await tmdb.getSeasonByExternalId(imdbId, season.number);
         return { number: season.number, data };
       }),
     );

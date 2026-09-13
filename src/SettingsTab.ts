@@ -14,6 +14,19 @@ export class SeriesTrackerSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     new Setting(containerEl)
+      .setName("Metadata provider")
+      .setDesc("Where series/movie search results and metadata come from. TMDb is currently the only supported provider.")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("tmdb", "TMDb")
+          .setValue(this.plugin.settings.metadataProvider)
+          .onChange(async (value) => {
+            this.plugin.settings.metadataProvider = value;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
       .setName("TMDb API key")
       .setDesc(
         "Used to fetch season episode lists, air dates, and search results (including non-English titles). Get a free key at themoviedb.org/settings/api. Leave blank to use local checkbox data only.",

@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile, Notice, requestUrl } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Notice } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
 import {
   parseSeriesBody,
@@ -14,7 +14,8 @@ import {
 } from "./SeriesParser";
 import { renderShowDetail } from "./ShowDetailView";
 import { AddSeriesModal } from "./AddSeriesModal";
-import { TmdbClient, TmdbFetcher, TmdbSearchResult, parseRuntimeMinutes } from "./TmdbClient";
+import { createMetadataProvider, MetadataProvider, MetadataSearchResult } from "./MetadataProvider";
+import { parseRuntimeMinutes } from "./TmdbClient";
 import { todayIso, formatDurationMinutes } from "./dateUtil";
 import { UpcomingEpisode, findNextUp, findUpcoming, groupUpcomingByDate } from "./upcoming";
 import { findRecentlyWatched } from "./recentlyWatched";
@@ -22,12 +23,6 @@ import { pruneOmdbCache } from "./cachePrune";
 import { topRatedGenres, excludeTracked, normalizeTitle } from "./recommendations";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
-
-/** Routes TMDb requests through Obsidian's CORS-safe requestUrl API. */
-const obsidianTmdbFetcher: TmdbFetcher = async (url) => {
-  const res = await requestUrl({ url });
-  return { json: res.json };
-};
 
 export class DashboardView extends ItemView {
   plugin: SeriesTrackerPlugin;
@@ -79,6 +74,13 @@ export class DashboardView extends ItemView {
     if (this.currentFile) return file.path === this.currentFile.path;
     const folder = normalizeFolderPath(this.plugin.settings.seriesFolder);
     return file.path.startsWith(folder + "/");
+  }
+
+  private newProvider(): MetadataProvider {
+    return createMetadataProvider(this.plugin.settings, async (c) => {
+      this.plugin.settings.tmdbCache = c;
+      await this.plugin.saveSettings();
+    });
   }
 
   async loadAllSeries(): Promise<{ file: TFile; parsed: ParsedSeries }[]> {
@@ -256,15 +258,7 @@ export class DashboardView extends ItemView {
     const tile4Value = tile4.createDiv({ cls: "st-tile-value", text: "—" });
     tile4.createDiv({ cls: "st-tile-label", text: "Time spent watching" });
 
-    const providersTmdb = new TmdbClient(
-      this.plugin.settings.tmdbApiKey,
-      this.plugin.settings.tmdbCache,
-      async (c) => {
-        this.plugin.settings.tmdbCache = c;
-        await this.plugin.saveSettings();
-      },
-      obsidianTmdbFetcher,
-    );
+    const providersTmdb = this.newProvider();
 
     const grid = container.createDiv({ cls: "st-grid" });
     for (const { file, parsed } of filtered) {
@@ -290,7 +284,7 @@ export class DashboardView extends ItemView {
       if (imdbId) {
         const badges = card.createDiv({ cls: "st-card-providers" });
         providersTmdb
-          .getWatchProvidersByImdbId(imdbId, this.plugin.settings.streamingCountry)
+          .getWatchProvidersByExternalId(imdbId, this.plugin.settings.streamingCountry)
           .then((providers) => {
             if (generation !== this.renderGeneration) return;
             for (const p of providers.slice(0, 4)) {
@@ -389,15 +383,7 @@ export class DashboardView extends ItemView {
    * data (missing/unparsable) contribute 0, not an error.
    */
   private async loadTimeSpentMinutes(all: { file: TFile; parsed: ParsedSeries }[]): Promise<number> {
-    const tmdb = new TmdbClient(
-      this.plugin.settings.tmdbApiKey,
-      this.plugin.settings.tmdbCache,
-      async (c) => {
-        this.plugin.settings.tmdbCache = c;
-        await this.plugin.saveSettings();
-      },
-      obsidianTmdbFetcher,
-    );
+    const tmdb = this.newProvider();
 
     const perShowMinutes = await Promise.all(
       all.map(async ({ parsed }) => {
@@ -405,7 +391,7 @@ export class DashboardView extends ItemView {
         if (watched === 0) return 0;
         const imdbId = extractImdbId(parsed.frontmatter.source_url);
         if (!imdbId) return 0;
-        const info = await tmdb.getDetailsByImdbId(imdbId);
+        const info = await tmdb.getDetailsByExternalId(imdbId);
         return watched * parseRuntimeMinutes(info?.runtime);
       }),
     );
@@ -441,21 +427,13 @@ export class DashboardView extends ItemView {
    * is rated yet, or if genre names can't be mapped to TMDb ids — either
    * way the caller renders nothing, not an empty/error state.
    */
-  private async loadRecommendations(all: { file: TFile; parsed: ParsedSeries }[]): Promise<TmdbSearchResult[]> {
+  private async loadRecommendations(all: { file: TFile; parsed: ParsedSeries }[]): Promise<MetadataSearchResult[]> {
     const topGenres = topRatedGenres(
       all.map(({ parsed }) => ({ genres: parsed.frontmatter.tags, rating: parsed.frontmatter.rating })),
     );
     if (topGenres.length === 0) return [];
 
-    const tmdb = new TmdbClient(
-      this.plugin.settings.tmdbApiKey,
-      this.plugin.settings.tmdbCache,
-      async (c) => {
-        this.plugin.settings.tmdbCache = c;
-        await this.plugin.saveSettings();
-      },
-      obsidianTmdbFetcher,
-    );
+    const tmdb = this.newProvider();
 
     const genreMap = await tmdb.getGenreMap("series");
     const genreIds = topGenres.map((g) => genreMap[g]).filter((id): id is number => typeof id === "number");
@@ -466,7 +444,7 @@ export class DashboardView extends ItemView {
     return excludeTracked(discovered, trackedTitles).slice(0, 8);
   }
 
-  private renderRecommendations(container: HTMLElement, candidates: TmdbSearchResult[]): void {
+  private renderRecommendations(container: HTMLElement, candidates: MetadataSearchResult[]): void {
     container.empty();
     if (candidates.length === 0) return;
 
@@ -493,15 +471,7 @@ export class DashboardView extends ItemView {
   private async loadUpcomingCandidates(
     all: { file: TFile; parsed: ParsedSeries }[],
   ): Promise<UpcomingEpisode[]> {
-    const tmdb = new TmdbClient(
-      this.plugin.settings.tmdbApiKey,
-      this.plugin.settings.tmdbCache,
-      async (c) => {
-        this.plugin.settings.tmdbCache = c;
-        await this.plugin.saveSettings();
-      },
-      obsidianTmdbFetcher,
-    );
+    const tmdb = this.newProvider();
 
     const candidates: UpcomingEpisode[] = [];
 
@@ -513,7 +483,7 @@ export class DashboardView extends ItemView {
         const unwatched = season.episodes.filter((e) => !e.watched);
         if (unwatched.length === 0) continue;
 
-        const data = await tmdb.getSeasonByImdbId(imdbId, season.number);
+        const data = await tmdb.getSeasonByExternalId(imdbId, season.number);
         if (!data) continue;
 
         for (const ep of unwatched) {

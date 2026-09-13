@@ -1,4 +1,4 @@
-import { TmdbSearchResult } from "./TmdbClient";
+import { MetadataSearchResult } from "./MetadataProvider";
 
 export interface RatedEntry {
   genres: string[];
@@ -37,9 +37,9 @@ export function topRatedGenres(entries: RatedEntry[], topN = 3): string[] {
  * user already has, without needing an extra resolve call per candidate.
  */
 export function excludeTracked(
-  candidates: TmdbSearchResult[],
+  candidates: MetadataSearchResult[],
   trackedTitles: Set<string>,
-): TmdbSearchResult[] {
+): MetadataSearchResult[] {
   return candidates.filter((c) => !trackedTitles.has(normalizeTitle(c.title)));
 }
 

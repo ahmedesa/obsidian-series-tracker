@@ -1,18 +1,13 @@
-import { ItemView, WorkspaceLeaf, requestUrl } from "obsidian";
+import { ItemView, WorkspaceLeaf } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
 import { parseFrontmatter, parseSeriesBody, splitFrontmatter, normalizeFolderPath, extractImdbId } from "./SeriesParser";
 import { parseMovieFrontmatter } from "./MovieParser";
-import { TmdbClient, TmdbFetcher, parseRuntimeMinutes } from "./TmdbClient";
+import { createMetadataProvider } from "./MetadataProvider";
+import { parseRuntimeMinutes } from "./TmdbClient";
 import { formatDurationMinutes } from "./dateUtil";
 import { countGenres, computeTasteIndex, GenreCount, GenreTaste } from "./metrics";
 
 export const VIEW_TYPE_METRICS = "series-tracker-metrics";
-
-/** Routes TMDb requests through Obsidian's CORS-safe requestUrl API. */
-const obsidianTmdbFetcher: TmdbFetcher = async (url) => {
-  const res = await requestUrl({ url });
-  return { json: res.json };
-};
 
 interface TrackedItem {
   kind: "series" | "movie";
@@ -191,15 +186,10 @@ export class MetricsView extends ItemView {
   private async loadRuntimeAndTaste(
     items: TrackedItem[],
   ): Promise<{ totalMinutes: number; taste: GenreTaste[] }> {
-    const tmdb = new TmdbClient(
-      this.plugin.settings.tmdbApiKey,
-      this.plugin.settings.tmdbCache,
-      async (c) => {
-        this.plugin.settings.tmdbCache = c;
-        await this.plugin.saveSettings();
-      },
-      obsidianTmdbFetcher,
-    );
+    const tmdb = createMetadataProvider(this.plugin.settings, async (c) => {
+      this.plugin.settings.tmdbCache = c;
+      await this.plugin.saveSettings();
+    });
 
     let totalMinutes = 0;
     const tasteEntries: { genres: string[]; myRating: number | null; publicRating: number | null }[] = [];
@@ -207,7 +197,7 @@ export class MetricsView extends ItemView {
     await Promise.all(
       items.map(async (item) => {
         if (!item.imdbId) return;
-        const info = await tmdb.getDetailsByImdbId(item.imdbId);
+        const info = await tmdb.getDetailsByExternalId(item.imdbId);
         if (!info) return;
         totalMinutes += item.watchedUnits * parseRuntimeMinutes(info.runtime);
         const publicRating = info.imdbRating ? parseFloat(info.imdbRating) : null;

@@ -7,6 +7,12 @@ import { asString, extractImdbId, normalizeFolderPath } from "./SeriesParser";
 import { CacheEntry } from "./TmdbClient";
 
 export interface SeriesTrackerSettings {
+  /**
+   * Which MetadataProvider implementation to use. Only "tmdb" exists today —
+   * this field exists so a future second provider is a Settings toggle, not
+   * another rewrite across every view (see src/MetadataProvider.ts).
+   */
+  metadataProvider: string;
   tmdbApiKey: string;
   seriesFolder: string;
   moviesFolder: string;
@@ -15,6 +21,7 @@ export interface SeriesTrackerSettings {
 }
 
 export const DEFAULT_SETTINGS: SeriesTrackerSettings = {
+  metadataProvider: "tmdb",
   tmdbApiKey: "",
   seriesFolder: "Media/Series",
   moviesFolder: "Media/Movies",

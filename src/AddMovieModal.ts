@@ -1,20 +1,15 @@
-import { App, Modal, Notice, normalizePath, requestUrl } from "obsidian";
+import { App, Modal, Notice, normalizePath } from "obsidian";
 import type SeriesTrackerPlugin from "./main";
-import { TmdbClient, TmdbFetcher, TmdbSearchResult } from "./TmdbClient";
+import { createMetadataProvider, MetadataProvider, MetadataSearchResult } from "./MetadataProvider";
 import { todayIso } from "./dateUtil";
 import { parseImdbId } from "./MovieParser";
-
-const obsidianTmdbFetcher: TmdbFetcher = async (url) => {
-  const res = await requestUrl({ url });
-  return { json: res.json };
-};
 
 /** Modal: search TMDb by title, pick a result, create a movie note for it. */
 export class AddMovieModal extends Modal {
   private plugin: SeriesTrackerPlugin;
   private onAdded: () => void;
   private resultsEl!: HTMLElement;
-  private preloadedResult?: TmdbSearchResult;
+  private preloadedResult?: MetadataSearchResult;
 
   /**
    * `preloadedResult` skips straight to a single pre-filled result (still
@@ -22,23 +17,18 @@ export class AddMovieModal extends Modal {
    * recommendations panel so suggesting a title doesn't need to duplicate
    * `createMovieNote`/re-implement search.
    */
-  constructor(app: App, plugin: SeriesTrackerPlugin, onAdded: () => void, preloadedResult?: TmdbSearchResult) {
+  constructor(app: App, plugin: SeriesTrackerPlugin, onAdded: () => void, preloadedResult?: MetadataSearchResult) {
     super(app);
     this.plugin = plugin;
     this.onAdded = onAdded;
     this.preloadedResult = preloadedResult;
   }
 
-  private newClient(): TmdbClient {
-    return new TmdbClient(
-      this.plugin.settings.tmdbApiKey,
-      this.plugin.settings.tmdbCache,
-      async (c) => {
-        this.plugin.settings.tmdbCache = c;
-        await this.plugin.saveSettings();
-      },
-      obsidianTmdbFetcher,
-    );
+  private newClient(): MetadataProvider {
+    return createMetadataProvider(this.plugin.settings, async (c) => {
+      this.plugin.settings.tmdbCache = c;
+      await this.plugin.saveSettings();
+    });
   }
 
   onOpen(): void {
@@ -66,7 +56,7 @@ export class AddMovieModal extends Modal {
       this.resultsEl.createEl("p", { text: "Searching…" });
 
       const tmdb = this.newClient();
-      const results = await tmdb.searchTitles(title, "movie");
+      const results = await tmdb.search(title, "movie");
       this.renderResults(results, tmdb);
     };
 
@@ -97,14 +87,14 @@ export class AddMovieModal extends Modal {
       idBtn.textContent = "Adding…";
       const tmdb = this.newClient();
       try {
-        const info = await tmdb.getDetailsByImdbId(imdbId);
+        const info = await tmdb.getDetailsByExternalId(imdbId);
         if (!info || !info.title) {
           throw new Error(`no movie found for ${imdbId}`);
         }
         if (info.type && info.type !== "movie") {
           throw new Error(`${imdbId} is a ${info.type}, not a movie`);
         }
-        const result: TmdbSearchResult = {
+        const result: MetadataSearchResult = {
           title: info.title,
           year: info.year,
           tmdbId: info.tmdbId,
@@ -130,7 +120,7 @@ export class AddMovieModal extends Modal {
     });
   }
 
-  private renderResults(results: TmdbSearchResult[], tmdb: TmdbClient): void {
+  private renderResults(results: MetadataSearchResult[], tmdb: MetadataProvider): void {
     this.resultsEl.empty();
     if (results.length === 0) {
       this.resultsEl.createEl("p", { text: "No results." });
@@ -171,7 +161,7 @@ export class AddMovieModal extends Modal {
     }
   }
 
-  private async createMovieNote(result: TmdbSearchResult, tmdb: TmdbClient): Promise<void> {
+  private async createMovieNote(result: MetadataSearchResult, tmdb: MetadataProvider): Promise<void> {
     const folder = this.plugin.settings.moviesFolder;
     if (!(await this.app.vault.adapter.exists(folder))) {
       await this.app.vault.createFolder(folder);

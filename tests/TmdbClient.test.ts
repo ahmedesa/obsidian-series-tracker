@@ -39,7 +39,7 @@ describe("parseRuntimeMinutes", () => {
   });
 });
 
-describe("TmdbClient.searchTitles", () => {
+describe("TmdbClient.search", () => {
   it("searches tv and maps fields", async () => {
     const { client } = newClient((url) => {
       expect(url).toContain("/search/tv");
@@ -57,7 +57,7 @@ describe("TmdbClient.searchTitles", () => {
         ],
       };
     });
-    const results = await client.searchTitles("Breaking Bad", "series");
+    const results = await client.search("Breaking Bad", "series");
     expect(results).toEqual([
       {
         tmdbId: 1396,
@@ -79,7 +79,7 @@ describe("TmdbClient.searchTitles", () => {
         ],
       };
     });
-    const results = await client.searchTitles("Inception", "movie");
+    const results = await client.search("Inception", "movie");
     expect(results).toEqual([
       { tmdbId: 27205, title: "Inception", year: "2010", poster: "", rating: "", plot: "" },
     ]);
@@ -87,7 +87,7 @@ describe("TmdbClient.searchTitles", () => {
 
   it("returns [] with no api key", async () => {
     const client = new TmdbClient("", {}, vi.fn(), makeFetcher(() => ({})));
-    expect(await client.searchTitles("x", "series")).toEqual([]);
+    expect(await client.search("x", "series")).toEqual([]);
   });
 
   it("returns [] on fetch error", async () => {
@@ -99,7 +99,7 @@ describe("TmdbClient.searchTitles", () => {
         throw new Error("network");
       },
     );
-    expect(await client.searchTitles("x", "series")).toEqual([]);
+    expect(await client.search("x", "series")).toEqual([]);
   });
 });
 
@@ -198,7 +198,7 @@ describe("TmdbClient.getSeason", () => {
   });
 });
 
-describe("TmdbClient.resolveFromImdbId", () => {
+describe("TmdbClient.resolveExternalId", () => {
   it("resolves a tv result and caches it permanently", async () => {
     let callCount = 0;
     const { client, cache } = newClient((url) => {
@@ -207,28 +207,28 @@ describe("TmdbClient.resolveFromImdbId", () => {
       expect(url).toContain("external_source=imdb_id");
       return { tv_results: [{ id: 1396, name: "Breaking Bad" }], movie_results: [] };
     });
-    const resolved = await client.resolveFromImdbId("tt0903747");
+    const resolved = await client.resolveExternalId("tt0903747");
     expect(resolved).toEqual({ tmdbId: 1396, mediaType: "series" });
     expect(cache["tt0903747:resolve"]).toBeDefined();
 
     // Second call must hit cache, not fetch again.
-    await client.resolveFromImdbId("tt0903747");
+    await client.resolveExternalId("tt0903747");
     expect(callCount).toBe(1);
   });
 
   it("resolves a movie result", async () => {
     const { client } = newClient(() => ({ tv_results: [], movie_results: [{ id: 27205, title: "Inception" }] }));
-    const resolved = await client.resolveFromImdbId("tt1375666");
+    const resolved = await client.resolveExternalId("tt1375666");
     expect(resolved).toEqual({ tmdbId: 27205, mediaType: "movie" });
   });
 
   it("returns null when nothing matches", async () => {
     const { client } = newClient(() => ({ tv_results: [], movie_results: [] }));
-    expect(await client.resolveFromImdbId("tt0000000")).toBeNull();
+    expect(await client.resolveExternalId("tt0000000")).toBeNull();
   });
 });
 
-describe("TmdbClient.getDetailsByImdbId", () => {
+describe("TmdbClient.getDetailsByExternalId", () => {
   it("resolves then fetches details, caching under <imdbId>:series", async () => {
     const { client, cache } = newClient((url) => {
       if (url.includes("/find/")) return { tv_results: [{ id: 1396 }], movie_results: [] };
@@ -241,7 +241,7 @@ describe("TmdbClient.getDetailsByImdbId", () => {
         external_ids: { imdb_id: "tt0903747" },
       };
     });
-    const info = await client.getDetailsByImdbId("tt0903747");
+    const info = await client.getDetailsByExternalId("tt0903747");
     expect(info?.title).toBe("Breaking Bad");
     expect(cache["tt0903747:series"]).toBeDefined();
   });
@@ -271,7 +271,7 @@ describe("TmdbClient.getDetailsByImdbId", () => {
       },
     };
     const client = new TmdbClient("key", cache, vi.fn(), fetcher);
-    const info = await client.getDetailsByImdbId("tt0903747");
+    const info = await client.getDetailsByExternalId("tt0903747");
     expect(info?.title).toBe("Breaking Bad");
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -308,25 +308,25 @@ describe("TmdbClient.getDetailsByImdbId", () => {
       status: "Ended",
       external_ids: { imdb_id: "tt0903747" },
     }), cache);
-    const info = await client.getDetailsByImdbId("tt0903747", true);
+    const info = await client.getDetailsByExternalId("tt0903747", true);
     expect(info?.title).toBe("Breaking Bad");
   });
 });
 
-describe("TmdbClient.getSeasonByImdbId", () => {
+describe("TmdbClient.getSeasonByExternalId", () => {
   it("resolves then fetches season, caching under <imdbId>:<season>", async () => {
     const { client, cache } = newClient((url) => {
       if (url.includes("/find/")) return { tv_results: [{ id: 1396 }], movie_results: [] };
       return { episodes: [{ episode_number: 1, name: "Pilot", air_date: "2008-01-20", vote_average: 8.2 }] };
     });
-    const season = await client.getSeasonByImdbId("tt0903747", 1);
+    const season = await client.getSeasonByExternalId("tt0903747", 1);
     expect(season?.episodes[0].title).toBe("Pilot");
     expect(cache["tt0903747:1"]).toBeDefined();
   });
 
   it("returns null for a movie imdb id (no seasons)", async () => {
     const { client } = newClient(() => ({ tv_results: [], movie_results: [{ id: 27205 }] }));
-    expect(await client.getSeasonByImdbId("tt1375666", 1)).toBeNull();
+    expect(await client.getSeasonByExternalId("tt1375666", 1)).toBeNull();
   });
 });
 
@@ -356,13 +356,13 @@ describe("TmdbClient.getWatchProviders", () => {
   });
 });
 
-describe("TmdbClient.getWatchProvidersByImdbId", () => {
+describe("TmdbClient.getWatchProvidersByExternalId", () => {
   it("resolves then fetches providers, caching under <imdbId>:providers:<country>", async () => {
     const { client, cache } = newClient((url) => {
       if (url.includes("/find/")) return { tv_results: [{ id: 1396 }], movie_results: [] };
       return { results: { US: { flatrate: [{ provider_name: "Netflix", logo_path: "/n.jpg" }] } } };
     });
-    const providers = await client.getWatchProvidersByImdbId("tt0903747", "US");
+    const providers = await client.getWatchProvidersByExternalId("tt0903747", "US");
     expect(providers).toEqual([{ name: "Netflix", logo: "https://image.tmdb.org/t/p/w92/n.jpg" }]);
     expect(cache["tt0903747:providers:US"]).toBeDefined();
   });
@@ -373,7 +373,7 @@ describe("TmdbClient.getWatchProvidersByImdbId", () => {
       "tt0903747:providers:US": { fetchedAt: Date.now(), data: [{ name: "Netflix", logo: "x" }] },
     };
     const client = new TmdbClient("test-key", cache, vi.fn(), findFetcher);
-    const providers = await client.getWatchProvidersByImdbId("tt0903747", "US");
+    const providers = await client.getWatchProvidersByExternalId("tt0903747", "US");
     expect(providers).toEqual([{ name: "Netflix", logo: "x" }]);
     expect(findFetcher).not.toHaveBeenCalled();
   });
