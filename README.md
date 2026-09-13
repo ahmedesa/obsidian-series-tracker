@@ -24,8 +24,10 @@ never owning your data.
 ## Features
 
 **Series**
-- Dashboard: poster grid, text + status + genre filters, stats (episodes
-  watched, shows in progress, shows tracked, time spent watching)
+- Dashboard: poster grid, text + status + genre filters, a sort control
+  (last edited / title / recently added / rating / status / recently
+  watched — defaults to last edited), stats (episodes watched, shows in
+  progress, shows tracked, favourites, time spent watching)
 - "Next Up" spotlight (oldest aired-but-unwatched episode across all
   tracked shows) and an "Upcoming" list grouped by air date
 - "Recently watched" feed
@@ -41,8 +43,10 @@ never owning your data.
   never a hard delete)
 
 **Movies**
-- Dashboard: poster grid, text + status + genre filters, stats (movies
-  watched, favourites, movies tracked, time spent watching)
+- Dashboard: poster grid, text + status + genre filters, a sort control
+  (last edited / title / recently added / rating / status / recently
+  watched — defaults to last edited), stats (movies watched, favourites,
+  movies tracked, time spent watching)
 - Add via TMDb search (poster, genre, plot, etc. filled in automatically)
 - Personal 0–5 rating (half-star increments), favourite toggle, status
   (Want to Watch / Watching / Watched), a "Mood" tag, an editable

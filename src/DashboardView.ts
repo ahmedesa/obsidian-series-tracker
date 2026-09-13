@@ -22,6 +22,7 @@ import { findRecentlyWatched } from "./recentlyWatched";
 import { pruneOmdbCache } from "./cachePrune";
 import { topRatedGenres, excludeTracked, normalizeTitle } from "./recommendations";
 import { renderMetricsPanel } from "./metricsPanel";
+import { SortBy, SORT_OPTIONS, DEFAULT_SORT_BY, sortEntries } from "./sorting";
 
 export const VIEW_TYPE_DASHBOARD = "series-tracker-dashboard";
 
@@ -35,6 +36,7 @@ export class DashboardView extends ItemView {
   private filterText = "";
   private filterStatus: string | null = null;
   private filterGenre: string | null = null;
+  private sortBy: SortBy = DEFAULT_SORT_BY;
 
   constructor(leaf: WorkspaceLeaf, plugin: SeriesTrackerPlugin) {
     super(leaf);
@@ -208,6 +210,19 @@ export class DashboardView extends ItemView {
       void this.render();
     });
 
+    // Sort control — the grid used to render in whatever arbitrary order
+    // the vault returned files in, which users found confusing. "Last
+    // edited" is the default (most-recently-touched note first).
+    const sortSelect = header.createEl("select", { cls: "st-sort-select" });
+    for (const opt of SORT_OPTIONS) {
+      sortSelect.createEl("option", { value: opt.value, text: opt.label });
+    }
+    sortSelect.value = this.sortBy;
+    sortSelect.addEventListener("change", () => {
+      this.sortBy = sortSelect.value as SortBy;
+      void this.render();
+    });
+
     const addBtn = header.createEl("button", { cls: "st-add-series", text: "+ add series" });
 
     addBtn.addEventListener("click", () => {
@@ -219,7 +234,7 @@ export class DashboardView extends ItemView {
     // controls above (those only affect the grid).
     const nextUpContainer = container.createDiv({ cls: "st-nextup-container" });
 
-    const filtered = all.filter(({ parsed }) => {
+    const filteredUnsorted = all.filter(({ parsed }) => {
       if (this.filterStatus && parsed.frontmatter.status !== this.filterStatus) return false;
       if (this.filterGenre && !parsed.frontmatter.tags.includes(this.filterGenre)) return false;
       if (this.filterText.trim() && !parsed.frontmatter.title.toLowerCase().includes(this.filterText.trim().toLowerCase())) {
@@ -227,6 +242,20 @@ export class DashboardView extends ItemView {
       }
       return true;
     });
+
+    const filtered = sortEntries(
+      filteredUnsorted.map((entry) => ({
+        ...entry,
+        title: entry.parsed.frontmatter.title,
+        rating: entry.parsed.frontmatter.rating,
+        status: entry.parsed.frontmatter.status,
+        dateAdded: entry.parsed.frontmatter.date_added,
+        dateCompleted: entry.parsed.frontmatter.date_completed,
+        mtime: entry.file.stat.mtime,
+      })),
+      this.sortBy,
+      STATUS_OPTIONS.map((o) => o.value),
+    );
 
     let totalEp = 0;
     let watchedEp = 0;

@@ -194,6 +194,9 @@
 .st-genre-filter {
   padding: 6px 10px;
 }
+.st-sort-select {
+  padding: 6px 10px;
+}
 .st-empty-state {
   color: var(--text-muted);
   grid-column: 1 / -1;
