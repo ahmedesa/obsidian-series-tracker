@@ -349,24 +349,60 @@ export async function renderShowDetail(
       });
       const list = container.createDiv({ cls: "st-episode-list" });
       const checkboxes: HTMLInputElement[] = [];
+      const dateInputs: HTMLInputElement[] = [];
 
       for (const ep of season.episodes) {
         const row = list.createDiv({ cls: "st-episode-row" });
         const checkbox = row.createEl("input", { type: "checkbox" });
         checkbox.checked = ep.watched;
         row.createSpan({ text: ` E${ep.number} — ${ep.title}` });
-        const dateSpan = row.createSpan({ cls: "st-watched-date" });
-        if (ep.watchedDate) dateSpan.setText(` (watched ${ep.watchedDate})`);
+        row.createSpan({ cls: "st-watched-date", text: " watched:" });
+        // Editable watched-date — only meaningful (and only shown) once the
+        // episode is checked. Unchecking clears it via the checkbox handler
+        // below, not this input.
+        const dateInput = row.createEl("input", { type: "date", cls: "st-episode-date-input" });
+        dateInput.value = ep.watchedDate ?? "";
+        if (!ep.watched) dateInput.hide();
         rowsByKey[`${season.number}:${ep.number}`] = row;
         checkboxes.push(checkbox);
+        dateInputs.push(dateInput);
 
         const handleEpisodeToggle = async () => {
           const stamp = checkbox.checked ? todayIso() : null;
           await writeEpisodeState(app, file, ep.lineIndex, checkbox.checked, stamp, checkbox, onChange);
-          dateSpan.setText(checkbox.checked && stamp ? ` (watched ${stamp})` : "");
+          ep.watchedDate = stamp;
+          if (checkbox.checked && stamp) {
+            dateInput.value = stamp;
+            dateInput.show();
+          } else {
+            dateInput.value = "";
+            dateInput.hide();
+          }
           await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
         };
         checkbox.addEventListener("change", () => void handleEpisodeToggle());
+
+        const handleWatchedDateEdit = async () => {
+          const next = dateInput.value;
+          const previous = ep.watchedDate;
+          if (!next) {
+            dateInput.value = previous ?? "";
+            return;
+          }
+          try {
+            await app.vault.process(file, (data) => {
+              const live = splitFrontmatter(data);
+              const lines = toggleEpisodeLine(live.body.split("\n"), ep.lineIndex, true, next);
+              return live.frontmatterBlock + lines.join("\n");
+            });
+            ep.watchedDate = next;
+          } catch (err) {
+            dateInput.value = previous ?? "";
+            console.error("Series Tracker: failed to write episode watched date", err);
+            new Notice(`Series Tracker: failed to update watched date — ${errorMessage(err)}`);
+          }
+        };
+        dateInput.addEventListener("change", () => void handleWatchedDateEdit());
       }
 
       const handleMarkSeasonWatched = async () => {
@@ -382,6 +418,14 @@ export async function renderShowDetail(
             return live.frontmatterBlock + lines.join("\n");
           });
           for (const cb of checkboxes) cb.checked = true;
+          for (const di of dateInputs) {
+            di.value = stamp;
+            di.show();
+          }
+          season.episodes.forEach((ep) => {
+            ep.watched = true;
+            ep.watchedDate = stamp;
+          });
           onChange();
           await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
         } catch (err) {

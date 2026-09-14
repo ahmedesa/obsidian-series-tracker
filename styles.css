@@ -61,6 +61,12 @@
   color: var(--text-faint);
   font-size: 0.8em;
 }
+.st-episode-date-input {
+  padding: 0 4px;
+  font-size: 0.8em;
+  color: var(--text-faint);
+  height: 1.6em;
+}
 .st-refresh-btn {
   margin-left: 8px;
 }
