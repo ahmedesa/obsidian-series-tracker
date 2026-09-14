@@ -56,17 +56,53 @@ export class DashboardView extends ItemView {
     return "tv";
   }
 
+  // Paths this view is currently writing to itself, via a field-edit
+  // handler in ShowDetailView.ts (mood/rating/favourite/dates/etc). Those
+  // handlers already update the in-memory frontmatter and their own DOM
+  // element directly — they don't need Obsidian's resulting "modify" event
+  // to trigger a full rebuild too, which previously reset scroll position
+  // and flickered on every single field edit. One entry is consumed per
+  // matching event, so overlapping self-writes to the same path are each
+  // accounted for individually.
+  private selfWritePaths = new Set<string>();
+
+  private markSelfWrite = (path: string): void => {
+    this.selfWritePaths.add(path);
+  };
+
+  private shouldSkipEvent(path: string): boolean {
+    if (this.selfWritePaths.has(path)) {
+      this.selfWritePaths.delete(path);
+      return true;
+    }
+    return false;
+  }
+
   async onOpen() {
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
-        if (file instanceof TFile && this.isRelevantFile(file)) {
+        if (file instanceof TFile && this.isRelevantFile(file) && !this.shouldSkipEvent(file.path)) {
           void this.render();
         }
       }),
     );
     this.registerEvent(
       this.app.vault.on("create", (file) => {
-        if (file instanceof TFile && this.isRelevantFile(file)) {
+        if (file instanceof TFile && this.isRelevantFile(file) && !this.shouldSkipEvent(file.path)) {
+          void this.render();
+        }
+      }),
+    );
+    // metadataCache.getFileCache() lags behind a just-created file — the
+    // "create" event above can fire before Obsidian finishes parsing the
+    // new note's frontmatter, so loadAllSeries() silently skips it on that
+    // first render (fm is still undefined). This listener catches the
+    // follow-up moment the cache actually finishes parsing, so a newly
+    // added show/movie shows up without the user closing and reopening
+    // the view.
+    this.registerEvent(
+      this.app.metadataCache.on("changed", (file) => {
+        if (file instanceof TFile && this.isRelevantFile(file) && !this.shouldSkipEvent(file.path)) {
           void this.render();
         }
       }),
@@ -629,6 +665,7 @@ export class DashboardView extends ItemView {
       this.plugin,
       file,
       () => void this.render(),
+      this.markSelfWrite,
       () => generation === this.renderGeneration,
       () => {
         this.currentFile = null;

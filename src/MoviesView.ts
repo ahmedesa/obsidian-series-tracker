@@ -60,17 +60,52 @@ export class MoviesView extends ItemView {
     return "clapperboard";
   }
 
+  // Paths this view is currently writing to itself, via a field-edit
+  // handler below (mood/rating/favourite/dates/status/notes). Those
+  // handlers already update the in-memory frontmatter and their own DOM
+  // element directly — they don't need Obsidian's resulting "modify" event
+  // to trigger a full rebuild too, which previously reset scroll position
+  // and flickered on every single field edit. One entry is consumed per
+  // matching event, so overlapping self-writes to the same path are each
+  // accounted for individually.
+  private selfWritePaths = new Set<string>();
+
+  private markSelfWrite = (path: string): void => {
+    this.selfWritePaths.add(path);
+  };
+
+  private shouldSkipEvent(path: string): boolean {
+    if (this.selfWritePaths.has(path)) {
+      this.selfWritePaths.delete(path);
+      return true;
+    }
+    return false;
+  }
+
   async onOpen() {
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
-        if (file instanceof TFile && this.isRelevantFile(file)) {
+        if (file instanceof TFile && this.isRelevantFile(file) && !this.shouldSkipEvent(file.path)) {
           void this.render();
         }
       }),
     );
     this.registerEvent(
       this.app.vault.on("create", (file) => {
-        if (file instanceof TFile && this.isRelevantFile(file)) {
+        if (file instanceof TFile && this.isRelevantFile(file) && !this.shouldSkipEvent(file.path)) {
+          void this.render();
+        }
+      }),
+    );
+    // metadataCache.getFileCache() lags behind a just-created file — the
+    // "create" event above can fire before Obsidian finishes parsing the
+    // new note's frontmatter, so loadAllMovies() silently skips it on that
+    // first render (fm is still undefined). This listener catches the
+    // follow-up moment the cache actually finishes parsing, so a newly
+    // added movie shows up without the user closing and reopening the view.
+    this.registerEvent(
+      this.app.metadataCache.on("changed", (file) => {
+        if (file instanceof TFile && this.isRelevantFile(file) && !this.shouldSkipEvent(file.path)) {
           void this.render();
         }
       }),
@@ -478,6 +513,7 @@ export class MoviesView extends ItemView {
         const next = addedInput.value;
         const previous = fm.date_added;
         try {
+          this.markSelfWrite(file.path);
           await this.app.vault.process(file, (data) => {
             const live = splitFrontmatter(data);
             return setFrontmatterStringField(live.frontmatterBlock, "date_added", next) + live.body;
@@ -502,6 +538,7 @@ export class MoviesView extends ItemView {
         const next = completedInput.value;
         const previous = fm.date_completed;
         try {
+          this.markSelfWrite(file.path);
           await this.app.vault.process(file, (data) => {
             const live = splitFrontmatter(data);
             return setFrontmatterStringField(live.frontmatterBlock, "date_completed", `"${next}"`) + live.body;
@@ -529,6 +566,7 @@ export class MoviesView extends ItemView {
         const previous = fm.status;
         try {
           let stampedDate: string | undefined;
+          this.markSelfWrite(file.path);
           await this.app.vault.process(file, (data) => {
             const live = splitFrontmatter(data);
             let fmBlock = setFrontmatterStringField(live.frontmatterBlock, "status", next);
@@ -567,6 +605,7 @@ export class MoviesView extends ItemView {
         const next = ratingSelect.value === "" ? null : parseFloat(ratingSelect.value);
         const previous = fm.rating;
         try {
+          this.markSelfWrite(file.path);
           await this.app.vault.process(file, (data) => {
             const live = splitFrontmatter(data);
             return setFrontmatterNumberField(live.frontmatterBlock, "rating", next) + live.body;
@@ -594,6 +633,7 @@ export class MoviesView extends ItemView {
         const next = moodSelect.value;
         const previous = fm.mood;
         try {
+          this.markSelfWrite(file.path);
           await this.app.vault.process(file, (data) => {
             const live = splitFrontmatter(data);
             return setFrontmatterStringField(live.frontmatterBlock, "mood", `"${next}"`) + live.body;
@@ -615,6 +655,7 @@ export class MoviesView extends ItemView {
       const handleFavouriteChange = async () => {
         const next = favCheckbox.checked;
         try {
+          this.markSelfWrite(file.path);
           await this.app.vault.process(file, (data) => {
             const live = splitFrontmatter(data);
             return setFrontmatterStringField(live.frontmatterBlock, "favourite", String(next)) + live.body;
@@ -665,6 +706,7 @@ export class MoviesView extends ItemView {
       let notesSaveTimer: number | undefined;
       const saveNotes = async () => {
         try {
+          this.markSelfWrite(file.path);
           await this.app.vault.process(file, (data) => {
             const live = splitFrontmatter(data);
             return live.frontmatterBlock + setNotesSection(live.body, notesArea.value);

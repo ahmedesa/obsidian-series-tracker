@@ -35,6 +35,7 @@ export async function renderShowDetail(
   plugin: SeriesTrackerPlugin,
   file: TFile,
   onChange: () => void,
+  markSelfWrite: (path: string) => void,
   isCurrent: () => boolean = () => true,
   onDeleted: () => void = () => {},
 ): Promise<void> {
@@ -63,6 +64,7 @@ export async function renderShowDetail(
       const next = addedInput.value;
       const previous = fm.date_added;
       try {
+        markSelfWrite(file.path);
         await app.vault.process(file, (data) => {
           const live = splitFrontmatter(data);
           return setFrontmatterStringField(live.frontmatterBlock, "date_added", next) + live.body;
@@ -87,6 +89,7 @@ export async function renderShowDetail(
       const next = completedInput.value;
       const previous = fm.date_completed;
       try {
+        markSelfWrite(file.path);
         await app.vault.process(file, (data) => {
           const live = splitFrontmatter(data);
           return setFrontmatterStringField(live.frontmatterBlock, "date_completed", `"${next}"`) + live.body;
@@ -120,6 +123,7 @@ export async function renderShowDetail(
       const next = statusSelect.value;
       const previous = fm.status;
       try {
+        markSelfWrite(file.path);
         await app.vault.process(file, (data) => {
           const live = splitFrontmatter(data);
           return setFrontmatterStringField(live.frontmatterBlock, "status", next) + live.body;
@@ -154,6 +158,7 @@ export async function renderShowDetail(
       const next = ratingSelect.value === "" ? null : parseFloat(ratingSelect.value);
       const previous = fm.rating;
       try {
+        markSelfWrite(file.path);
         await app.vault.process(file, (data) => {
           const live = splitFrontmatter(data);
           return setFrontmatterNumberField(live.frontmatterBlock, "rating", next) + live.body;
@@ -181,6 +186,7 @@ export async function renderShowDetail(
       const next = moodSelect.value;
       const previous = fm.mood;
       try {
+        markSelfWrite(file.path);
         await app.vault.process(file, (data) => {
           const live = splitFrontmatter(data);
           return setFrontmatterStringField(live.frontmatterBlock, "mood", `"${next}"`) + live.body;
@@ -202,6 +208,7 @@ export async function renderShowDetail(
     const handleFavouriteChange = async () => {
       const next = favCheckbox.checked;
       try {
+        markSelfWrite(file.path);
         await app.vault.process(file, (data) => {
           const live = splitFrontmatter(data);
           return setFrontmatterStringField(live.frontmatterBlock, "favourite", String(next)) + live.body;
@@ -265,6 +272,7 @@ export async function renderShowDetail(
         seriesEndedFlag = freshInfo?.seriesEnded;
 
         let merged = { episodesAdded: 0, seasonsAdded: 0 };
+        markSelfWrite(file.path);
         await app.vault.process(file, (data) => {
           const live = splitFrontmatter(data);
           const result = mergeNewEpisodes(live.body, seasonsData);
@@ -292,7 +300,7 @@ export async function renderShowDetail(
           new Notice("Series tracker: no new episodes.");
         }
         onChange();
-        await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
+        await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, markSelfWrite, completedInput);
       } catch (err) {
         console.error("Series Tracker: refresh failed", err);
         new Notice(`Series Tracker: refresh failed — ${errorMessage(err)}`);
@@ -369,7 +377,7 @@ export async function renderShowDetail(
 
         const handleEpisodeToggle = async () => {
           const stamp = checkbox.checked ? todayIso() : null;
-          await writeEpisodeState(app, file, ep.lineIndex, checkbox.checked, stamp, checkbox, onChange);
+          await writeEpisodeState(app, file, ep.lineIndex, checkbox.checked, stamp, checkbox, onChange, markSelfWrite);
           ep.watchedDate = stamp;
           if (checkbox.checked && stamp) {
             dateInput.value = stamp;
@@ -378,7 +386,7 @@ export async function renderShowDetail(
             dateInput.value = "";
             dateInput.hide();
           }
-          await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
+          await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, markSelfWrite, completedInput);
         };
         checkbox.addEventListener("change", () => void handleEpisodeToggle());
 
@@ -390,6 +398,7 @@ export async function renderShowDetail(
             return;
           }
           try {
+            markSelfWrite(file.path);
             await app.vault.process(file, (data) => {
               const live = splitFrontmatter(data);
               const lines = toggleEpisodeLine(live.body.split("\n"), ep.lineIndex, true, next);
@@ -409,6 +418,7 @@ export async function renderShowDetail(
         markWatchedBtn.disabled = true;
         const stamp = todayIso();
         try {
+          markSelfWrite(file.path);
           await app.vault.process(file, (data) => {
             const live = splitFrontmatter(data);
             let lines = live.body.split("\n");
@@ -427,7 +437,7 @@ export async function renderShowDetail(
             ep.watchedDate = stamp;
           });
           onChange();
-          await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
+          await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, markSelfWrite, completedInput);
         } catch (err) {
           console.error("Series Tracker: failed to mark season watched", err);
           new Notice(`Series Tracker: failed to mark season watched — ${errorMessage(err)}`);
@@ -446,6 +456,7 @@ export async function renderShowDetail(
     let notesSaveTimer: number | undefined;
     const saveNotes = async () => {
       try {
+        markSelfWrite(file.path);
         await app.vault.process(file, (data) => {
           const live = splitFrontmatter(data);
           return live.frontmatterBlock + setNotesSection(live.body, notesArea.value);
@@ -515,7 +526,7 @@ export async function renderShowDetail(
     // covers the case where TMDb data changed (e.g. a new episode aired)
     // since the last time this note was touched, without requiring an
     // explicit interaction first.
-    await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, completedInput);
+    await autoUpdateStatus(app, file, fm, statusSelect, episodeAirDates, seriesEndedFlag, markSelfWrite, completedInput);
   } catch (err) {
     console.error("Series Tracker: failed to render show detail", err);
     if (isCurrent()) {
@@ -532,8 +543,10 @@ async function writeEpisodeState(
   watchedDate: string | null,
   checkbox: HTMLInputElement,
   onChange: () => void,
+  markSelfWrite: (path: string) => void,
 ): Promise<void> {
   try {
+    markSelfWrite(file.path);
     await app.vault.process(file, (data) => {
       const live = splitFrontmatter(data);
       const liveLines = live.body.split("\n");
@@ -563,6 +576,7 @@ async function autoUpdateStatus(
   statusSelect: HTMLSelectElement,
   episodeAirDates: Map<string, string>,
   seriesEnded: boolean | undefined,
+  markSelfWrite: (path: string) => void,
   completedInput?: HTMLInputElement,
 ): Promise<void> {
   if (fm.status === MANUAL_ONLY_STATUS) return;
@@ -570,6 +584,7 @@ async function autoUpdateStatus(
   try {
     let newStatus: string | null = null;
     let newCompletedDate: string | undefined;
+    markSelfWrite(file.path);
     await app.vault.process(file, (data) => {
       const live = splitFrontmatter(data);
       const liveSeasons = parseSeriesBody(live.body);
