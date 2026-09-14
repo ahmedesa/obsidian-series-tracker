@@ -470,9 +470,26 @@ export class MoviesView extends ItemView {
         container.createEl("img", { cls: "st-detail-poster", attr: { src: fm.image } });
       }
 
-      if (fm.date_added) {
-        container.createDiv({ cls: "st-date-added", text: `Added: ${fm.date_added}` });
-      }
+      const addedRow = container.createDiv({ cls: "st-completed-row" });
+      addedRow.createSpan({ text: "Added: " });
+      const addedInput = addedRow.createEl("input", { type: "date", cls: "st-completed-input" });
+      addedInput.value = fm.date_added;
+      const handleAddedChange = async () => {
+        const next = addedInput.value;
+        const previous = fm.date_added;
+        try {
+          await this.app.vault.process(file, (data) => {
+            const live = splitFrontmatter(data);
+            return setFrontmatterStringField(live.frontmatterBlock, "date_added", next) + live.body;
+          });
+          fm.date_added = next;
+        } catch (err) {
+          addedInput.value = previous;
+          console.error("Series Tracker: failed to write added date", err);
+          new Notice(`Series Tracker: failed to save added date — ${errorMessage(err)}`);
+        }
+      };
+      addedInput.addEventListener("change", () => void handleAddedChange());
 
       // Completed-on date — auto-stamped when status becomes "watched" (see
       // handleStatusChange below), but editable here so the user can correct

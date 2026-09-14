@@ -55,9 +55,26 @@ export async function renderShowDetail(
     titleRow.createEl("h2", { text: fm.title });
     const yearEl = titleRow.createSpan({ cls: "st-title-year" });
 
-    if (fm.date_added) {
-      container.createDiv({ cls: "st-date-added", text: `Added: ${fm.date_added}` });
-    }
+    const addedRow = container.createDiv({ cls: "st-completed-row" });
+    addedRow.createSpan({ text: "Added: " });
+    const addedInput = addedRow.createEl("input", { type: "date", cls: "st-completed-input" });
+    addedInput.value = fm.date_added;
+    const handleAddedChange = async () => {
+      const next = addedInput.value;
+      const previous = fm.date_added;
+      try {
+        await app.vault.process(file, (data) => {
+          const live = splitFrontmatter(data);
+          return setFrontmatterStringField(live.frontmatterBlock, "date_added", next) + live.body;
+        });
+        fm.date_added = next;
+      } catch (err) {
+        addedInput.value = previous;
+        console.error("Series Tracker: failed to write added date", err);
+        new Notice(`Series Tracker: failed to save added date — ${errorMessage(err)}`);
+      }
+    };
+    addedInput.addEventListener("change", () => void handleAddedChange());
 
     // Completed-on date — auto-stamped when status reaches "finished" (see
     // autoUpdateStatus below), but editable here so the user can correct or
