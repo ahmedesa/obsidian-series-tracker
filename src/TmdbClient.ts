@@ -49,6 +49,7 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const TMDB_API_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
 const TMDB_LOGO_BASE = "https://image.tmdb.org/t/p/w92";
+const TMDB_BACKDROP_BASE = "https://image.tmdb.org/t/p/w780";
 
 /** TMDb tv `status`: "Ended"/"Canceled" mean no more episodes are coming. Exported for testing. */
 export function isSeriesEnded(status: string | undefined | null): boolean {
@@ -68,6 +69,10 @@ function formatRuntime(minutes: number | undefined | null): string {
 
 function posterUrl(path: string | null | undefined): string {
   return path ? `${TMDB_IMAGE_BASE}${path}` : "";
+}
+
+function backdropUrl(path: string | null | undefined): string {
+  return path ? `${TMDB_BACKDROP_BASE}${path}` : "";
 }
 
 function logoUrl(path: string | null | undefined): string {
@@ -111,18 +116,80 @@ interface TmdbExternalIds {
   imdb_id?: string | null;
 }
 
+interface TmdbNetwork {
+  name?: string;
+}
+
+interface TmdbRawContentRating {
+  iso_3166_1?: string;
+  rating?: string;
+}
+
+interface TmdbRawContentRatingsResponse {
+  results?: TmdbRawContentRating[];
+}
+
+interface TmdbRawReleaseDateEntry {
+  certification?: string;
+}
+
+interface TmdbRawReleaseDatesCountry {
+  iso_3166_1?: string;
+  release_dates?: TmdbRawReleaseDateEntry[];
+}
+
+interface TmdbRawReleaseDatesResponse {
+  results?: TmdbRawReleaseDatesCountry[];
+}
+
+/**
+ * TMDb's `content_ratings` (tv `append_to_response`) is a per-country list
+ * of age ratings ("TV-MA", "16", ...). Prefer the US entry (matches this
+ * codebase's other US-first conventions, e.g. streaming providers); fall
+ * back to the first country that actually has a rating. Exported for testing.
+ */
+export function extractTvContentRating(contentRatings: TmdbRawContentRatingsResponse | undefined): string {
+  const results = contentRatings?.results ?? [];
+  const us = results.find((r) => r.iso_3166_1 === "US" && r.rating);
+  if (us?.rating) return us.rating;
+  const first = results.find((r) => r.rating);
+  return first?.rating ?? "";
+}
+
+/**
+ * TMDb's `release_dates` (movie `append_to_response`) nests certifications
+ * one level deeper than `content_ratings` does for tv — per country, a list
+ * of release-date entries (theatrical/digital/etc.), each optionally
+ * carrying a certification. Same US-first, first-available fallback.
+ * Exported for testing.
+ */
+export function extractMovieCertification(releaseDates: TmdbRawReleaseDatesResponse | undefined): string {
+  const results = releaseDates?.results ?? [];
+  const us = results.find((r) => r.iso_3166_1 === "US");
+  const usCert = us?.release_dates?.find((d) => d.certification)?.certification;
+  if (usCert) return usCert;
+  for (const r of results) {
+    const cert = r.release_dates?.find((d) => d.certification)?.certification;
+    if (cert) return cert;
+  }
+  return "";
+}
+
 interface TmdbRawTvDetails {
   name?: string;
   overview?: string;
   first_air_date?: string;
   genres?: TmdbGenre[];
   poster_path?: string | null;
+  backdrop_path?: string | null;
   number_of_seasons?: number;
   status?: string;
   vote_average?: number;
   episode_run_time?: number[];
   origin_country?: string[];
   external_ids?: TmdbExternalIds;
+  networks?: TmdbNetwork[];
+  content_ratings?: TmdbRawContentRatingsResponse;
 }
 
 interface TmdbRawMovieDetails {
@@ -131,10 +198,12 @@ interface TmdbRawMovieDetails {
   release_date?: string;
   genres?: TmdbGenre[];
   poster_path?: string | null;
+  backdrop_path?: string | null;
   runtime?: number;
   vote_average?: number;
   production_countries?: { iso_3166_1: string; name: string }[];
   external_ids?: TmdbExternalIds;
+  release_dates?: TmdbRawReleaseDatesResponse;
 }
 
 interface TmdbRawSearchTvEntry {
@@ -253,7 +322,7 @@ export class TmdbClient implements MetadataProvider {
     if (!this.apiKey) return null;
     try {
       if (mediaType === "series") {
-        const url = `${TMDB_API_BASE}/tv/${tmdbId}?api_key=${this.apiKey}&append_to_response=external_ids`;
+        const url = `${TMDB_API_BASE}/tv/${tmdbId}?api_key=${this.apiKey}&append_to_response=external_ids,content_ratings`;
         const { json } = await this.fetcher(url);
         const raw = json as TmdbRawTvDetails;
         if (!raw.name) return null;
@@ -261,7 +330,7 @@ export class TmdbClient implements MetadataProvider {
           title: raw.name ?? "",
           year: (raw.first_air_date ?? "").slice(0, 4),
           plot: raw.overview ?? "",
-          rated: "",
+          rated: extractTvContentRating(raw.content_ratings),
           runtime: formatRuntime(raw.episode_run_time?.[0]),
           country: (raw.origin_country ?? []).join(", "),
           awards: "",
@@ -273,9 +342,11 @@ export class TmdbClient implements MetadataProvider {
           type: "series",
           imdbId: raw.external_ids?.imdb_id ?? "",
           tmdbId,
+          network: raw.networks?.[0]?.name ?? "",
+          backdrop: backdropUrl(raw.backdrop_path),
         };
       }
-      const url = `${TMDB_API_BASE}/movie/${tmdbId}?api_key=${this.apiKey}&append_to_response=external_ids`;
+      const url = `${TMDB_API_BASE}/movie/${tmdbId}?api_key=${this.apiKey}&append_to_response=external_ids,release_dates`;
       const { json } = await this.fetcher(url);
       const raw = json as TmdbRawMovieDetails;
       if (!raw.title) return null;
@@ -283,7 +354,7 @@ export class TmdbClient implements MetadataProvider {
         title: raw.title ?? "",
         year: (raw.release_date ?? "").slice(0, 4),
         plot: raw.overview ?? "",
-        rated: "",
+        rated: extractMovieCertification(raw.release_dates),
         runtime: formatRuntime(raw.runtime),
         country: (raw.production_countries ?? []).map((c) => c.name).join(", "),
         awards: "",
@@ -295,6 +366,8 @@ export class TmdbClient implements MetadataProvider {
         type: "movie",
         imdbId: raw.external_ids?.imdb_id ?? "",
         tmdbId,
+        network: "",
+        backdrop: backdropUrl(raw.backdrop_path),
       };
     } catch {
       return null;

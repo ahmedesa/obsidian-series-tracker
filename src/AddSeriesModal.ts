@@ -179,6 +179,9 @@ export class AddSeriesModal extends Modal {
     const image = info?.poster || result.poster || "";
     const totalSeasons = info?.totalSeasons ?? 0;
     const imdbId = info?.imdbId ?? "";
+    const network = info?.network ?? "";
+    const contentRating = info?.rated ?? "";
+    const backdrop = info?.backdrop ?? "";
 
     // Fetch every season. If the series-level lookup (for the season count)
     // failed or returned 0, don't silently assume "1 season" — probe
@@ -228,6 +231,9 @@ tags: [${genres}]
 date_added: ${todayIso()}
 date_completed: ""
 image: "${image}"
+network: "${escapeYamlString(network)}"
+content_rating: "${escapeYamlString(contentRating)}"
+backdrop: "${backdrop}"
 ---
 
 # ${result.title}

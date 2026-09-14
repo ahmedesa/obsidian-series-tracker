@@ -22,6 +22,9 @@ export interface SeriesFrontmatter {
   date_completed: string;
   mood: string;
   tags: string[];
+  network: string;
+  content_rating: string;
+  backdrop: string;
 }
 
 /**
@@ -241,6 +244,9 @@ export function parseFrontmatter(fm: Record<string, unknown>): SeriesFrontmatter
     date_completed: asString(fm.date_completed),
     mood: asString(fm.mood),
     tags: asStringArray(fm.tags),
+    network: asString(fm.network),
+    content_rating: asString(fm.content_rating),
+    backdrop: asString(fm.backdrop),
   };
 }
 

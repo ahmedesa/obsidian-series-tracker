@@ -123,6 +123,14 @@
   display: block;
   margin-bottom: 12px;
 }
+.st-detail-backdrop {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 12px;
+}
 .st-notes-textarea {
   width: 100%;
   min-height: 100px;

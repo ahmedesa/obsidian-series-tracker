@@ -34,6 +34,10 @@ export interface MetadataDetails {
   imdbId: string;
   /** The provider's own internal numeric id for this title. */
   tmdbId: number;
+  /** Broadcast network (series only). "" for movies or when unknown. */
+  network: string;
+  /** Wide banner/fanart image, absolute URL. "" when unavailable. */
+  backdrop: string;
 }
 
 export interface WatchProvider {

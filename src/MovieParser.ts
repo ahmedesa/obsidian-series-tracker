@@ -27,6 +27,8 @@ export interface MovieFrontmatter {
   date_added: string;
   date_completed: string;
   mood: string;
+  content_rating: string;
+  backdrop: string;
 }
 
 /**
@@ -56,5 +58,7 @@ export function parseMovieFrontmatter(fm: Record<string, unknown>): MovieFrontma
     date_added: asString(fm.date_added),
     date_completed: asString(fm.date_completed),
     mood: asString(fm.mood),
+    content_rating: asString(fm.content_rating),
+    backdrop: asString(fm.backdrop),
   };
 }

@@ -458,6 +458,10 @@ export class MoviesView extends ItemView {
       const cache = this.app.metadataCache.getFileCache(file);
       const fm = parseMovieFrontmatter((cache?.frontmatter) ?? {});
 
+      if (fm.backdrop) {
+        container.createEl("img", { cls: "st-detail-backdrop", attr: { src: fm.backdrop } });
+      }
+
       const titleRow = container.createDiv({ cls: "st-title-row" });
       titleRow.createEl("h2", { text: fm.title });
       const yearEl = titleRow.createSpan({ cls: "st-title-year" });

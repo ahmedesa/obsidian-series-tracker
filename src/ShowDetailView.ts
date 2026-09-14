@@ -47,6 +47,10 @@ export async function renderShowDetail(
     const fm = parseFrontmatter((cache?.frontmatter) ?? {});
     const seasons = parseSeriesBody(body);
 
+    if (fm.backdrop) {
+      container.createEl("img", { cls: "st-detail-backdrop", attr: { src: fm.backdrop } });
+    }
+
     const titleRow = container.createDiv({ cls: "st-title-row" });
     titleRow.createEl("h2", { text: fm.title });
     const yearEl = titleRow.createSpan({ cls: "st-title-year" });
@@ -252,6 +256,15 @@ export async function renderShowDetail(
           if (freshInfo?.totalSeasons) {
             fmBlock = setFrontmatterNumberField(fmBlock, "total_seasons", freshInfo.totalSeasons);
           }
+          if (freshInfo?.network) {
+            fmBlock = setFrontmatterStringField(fmBlock, "network", `"${freshInfo.network}"`);
+          }
+          if (freshInfo?.rated) {
+            fmBlock = setFrontmatterStringField(fmBlock, "content_rating", `"${freshInfo.rated}"`);
+          }
+          if (freshInfo?.backdrop) {
+            fmBlock = setFrontmatterStringField(fmBlock, "backdrop", `"${freshInfo.backdrop}"`);
+          }
           return fmBlock + result.body;
         });
 
@@ -290,6 +303,7 @@ export async function renderShowDetail(
         const meta = panel.createDiv({ cls: "st-info-meta" });
         const fields: [string, string][] = [
           ["Airing status", info.seriesEnded ? "Ended" : "Returning"],
+          ["Network", info.network],
           ["Rated", info.rated],
           ["Runtime", info.runtime],
           ["Country", info.country],

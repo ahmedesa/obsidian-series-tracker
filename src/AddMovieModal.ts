@@ -173,6 +173,8 @@ export class AddMovieModal extends Modal {
       : "";
     const image = info?.poster || result.poster || "";
     const imdbId = info?.imdbId ?? "";
+    const contentRating = info?.rated ?? "";
+    const backdrop = info?.backdrop ?? "";
 
     const fileName = sanitizeFileName(`${result.title} ${result.year}`);
     const path = normalizePath(`${folder}/${fileName}.md`);
@@ -192,6 +194,8 @@ tags: [${genres}]
 date_added: ${todayIso()}
 date_completed: ""
 image: "${image}"
+content_rating: "${escapeYamlString(contentRating)}"
+backdrop: "${backdrop}"
 ---
 
 # ${result.title}

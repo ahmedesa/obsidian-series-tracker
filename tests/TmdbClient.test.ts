@@ -107,7 +107,7 @@ describe("TmdbClient.getDetails", () => {
   it("fetches tv details including external_ids", async () => {
     const { client } = newClient((url) => {
       expect(url).toContain("/tv/1396");
-      expect(url).toContain("append_to_response=external_ids");
+      expect(url).toContain("append_to_response=external_ids,content_ratings");
       return {
         name: "Breaking Bad",
         overview: "A chemistry teacher...",
@@ -139,12 +139,47 @@ describe("TmdbClient.getDetails", () => {
       type: "series",
       imdbId: "tt0903747",
       tmdbId: 1396,
+      network: "",
+      backdrop: "",
     });
+  });
+
+  it("populates network, content rating, and backdrop for tv", async () => {
+    const { client } = newClient((url) => {
+      expect(url).toContain("append_to_response=external_ids,content_ratings");
+      return {
+        name: "Breaking Bad",
+        first_air_date: "2008-01-20",
+        networks: [{ name: "AMC" }],
+        backdrop_path: "/backdrop.jpg",
+        content_ratings: {
+          results: [
+            { iso_3166_1: "GB", rating: "15" },
+            { iso_3166_1: "US", rating: "TV-MA" },
+          ],
+        },
+      };
+    });
+    const info = await client.getDetails(1396, "series");
+    expect(info?.network).toBe("AMC");
+    expect(info?.backdrop).toBe("https://image.tmdb.org/t/p/w780/backdrop.jpg");
+    expect(info?.rated).toBe("TV-MA");
+  });
+
+  it("falls back to first available content rating when US is missing", async () => {
+    const { client } = newClient(() => ({
+      name: "Show",
+      first_air_date: "2020-01-01",
+      content_ratings: { results: [{ iso_3166_1: "GB", rating: "15" }] },
+    }));
+    const info = await client.getDetails(1, "series");
+    expect(info?.rated).toBe("15");
   });
 
   it("fetches movie details", async () => {
     const { client } = newClient((url) => {
       expect(url).toContain("/movie/27205");
+      expect(url).toContain("append_to_response=external_ids,release_dates");
       return {
         title: "Inception",
         overview: "A thief...",
@@ -163,6 +198,39 @@ describe("TmdbClient.getDetails", () => {
     expect(info?.imdbId).toBe("tt1375666");
     expect(info?.seriesEnded).toBe(true);
     expect(info?.type).toBe("movie");
+    expect(info?.network).toBe("");
+  });
+
+  it("populates certification and backdrop for movies", async () => {
+    const { client } = newClient(() => ({
+      title: "Inception",
+      release_date: "2010-07-15",
+      backdrop_path: "/inception-backdrop.jpg",
+      release_dates: {
+        results: [
+          { iso_3166_1: "FR", release_dates: [{ certification: "12" }] },
+          { iso_3166_1: "US", release_dates: [{ certification: "" }, { certification: "PG-13" }] },
+        ],
+      },
+    }));
+    const info = await client.getDetails(27205, "movie");
+    expect(info?.rated).toBe("PG-13");
+    expect(info?.backdrop).toBe("https://image.tmdb.org/t/p/w780/inception-backdrop.jpg");
+  });
+
+  it("falls back to first available certification when US has none", async () => {
+    const { client } = newClient(() => ({
+      title: "Movie",
+      release_date: "2020-01-01",
+      release_dates: {
+        results: [
+          { iso_3166_1: "US", release_dates: [{ certification: "" }] },
+          { iso_3166_1: "FR", release_dates: [{ certification: "12" }] },
+        ],
+      },
+    }));
+    const info = await client.getDetails(1, "movie");
+    expect(info?.rated).toBe("12");
   });
 
   it("returns null when response has no name/title", async () => {
