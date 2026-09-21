@@ -19,6 +19,7 @@ import { parseRuntimeMinutes } from "./TmdbClient";
 import { todayIso, formatDurationMinutes } from "./dateUtil";
 import { UpcomingEpisode, findNextUp, findUpcoming, groupUpcomingByDate } from "./upcoming";
 import { findRecentlyWatched } from "./recentlyWatched";
+import { findQuickPicks } from "./quickPicks";
 import { pruneOmdbCache } from "./cachePrune";
 import { topRatedGenres, excludeTracked, normalizeTitle } from "./recommendations";
 import { renderMetricsPanel } from "./metricsPanel";
@@ -272,6 +273,21 @@ export class DashboardView extends ItemView {
     // controls above (those only affect the grid).
     const nextUpContainer = container.createDiv({ cls: "st-nextup-container" });
 
+    // Quick picks — shows with unwatched episodes, fewest-first. Pure local
+    // data (episode watched-state is already parsed from each note), so it
+    // renders immediately alongside Next Up, no fetch needed.
+    const quickPicksContainer = container.createDiv({ cls: "st-quickpicks-container" });
+    this.renderQuickPicks(
+      quickPicksContainer,
+      all.map(({ file, parsed }) => ({
+        title: parsed.frontmatter.title,
+        image: parsed.frontmatter.image,
+        filePath: file.path,
+        seasons: parsed.seasons,
+      })),
+      new Map(all.map(({ file }) => [file.path, file])),
+    );
+
     const filteredUnsorted = all.filter(({ parsed }) => {
       if (this.filterStatus && parsed.frontmatter.status !== this.filterStatus) return false;
       if (this.filterGenre && !parsed.frontmatter.tags.includes(this.filterGenre)) return false;
@@ -497,6 +513,34 @@ export class DashboardView extends ItemView {
       info.createSpan({ cls: "st-recently-watched-show", text: entry.showTitle });
       info.createSpan({ cls: "st-recently-watched-episode", text: ` ${epNum} — ${entry.title}` });
       row.createSpan({ cls: "st-recently-watched-date", text: entry.watchedDate });
+    }
+  }
+
+  private renderQuickPicks(
+    container: HTMLElement,
+    shows: { title: string; image: string; filePath: string; seasons: ParsedSeries["seasons"] }[],
+    fileByPath: Map<string, TFile>,
+  ): void {
+    container.empty();
+    const picks = findQuickPicks(shows);
+    if (picks.length === 0) return;
+
+    container.createEl("h3", { text: "Quick picks" });
+    const strip = container.createDiv({ cls: "st-quickpicks-strip" });
+    for (const pick of picks) {
+      const card = strip.createDiv({ cls: "st-quickpicks-card" });
+      if (pick.image) card.createEl("img", { cls: "st-quickpicks-poster", attr: { src: pick.image } });
+      card.createDiv({ cls: "st-quickpicks-title", text: pick.title });
+      card.createDiv({
+        cls: "st-quickpicks-count",
+        text: `${pick.unwatchedCount} episode${pick.unwatchedCount === 1 ? "" : "s"}`,
+      });
+      card.onClickEvent(() => {
+        const file = fileByPath.get(pick.filePath);
+        if (!file) return;
+        this.currentFile = file;
+        void this.render();
+      });
     }
   }
 
