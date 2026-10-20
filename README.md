@@ -198,6 +198,10 @@ rules community.obsidian.md's plugin review checks, so issues surface
 locally before a push instead of on the review page. All three must pass
 before a commit.
 
+## Support
+
+If Series Tracker is useful to you and you want to help keep it going, you can [support it here](https://ahmedesatools.lemonsqueezy.com/checkout/buy/2d29d136-ec93-476c-894a-9090304d9e6c). Thanks!
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
