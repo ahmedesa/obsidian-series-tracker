@@ -5,5 +5,6 @@
   "minAppVersion": "1.7.2",
   "description": "Dashboard, episode tracker, and watchlist for TV series and movie notes.",
   "author": "Ahmed Essa",
-  "isDesktopOnly": false
+  "isDesktopOnly": false,
+  "fundingUrl": "https://ahmedesatools.lemonsqueezy.com/checkout/buy/2d29d136-ec93-476c-894a-9090304d9e6c"
 }
