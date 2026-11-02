@@ -198,6 +198,10 @@ rules community.obsidian.md's plugin review checks, so issues surface
 locally before a push instead of on the review page. All three must pass
 before a commit.
 
+## Support
+
+If you find the plugin useful, you can support it on [GitHub Sponsors](https://github.com/sponsors/ahmedesa).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
