@@ -126,7 +126,7 @@ export class MoviesView extends ItemView {
     });
   }
 
-  async loadAllMovies(): Promise<{ file: TFile; parsed: ParsedMovie }[]> {
+  loadAllMovies(): Promise<{ file: TFile; parsed: ParsedMovie }[]> {
     const folder = normalizeFolderPath(this.plugin.settings.moviesFolder);
     const files = this.app.vault
       .getMarkdownFiles()
@@ -145,7 +145,7 @@ export class MoviesView extends ItemView {
         },
       });
     }
-    return results;
+    return Promise.resolve(results);
   }
 
   async render() {
