@@ -21,7 +21,7 @@ import { createMetadataProvider, MetadataProvider, MetadataSearchResult } from "
 import { parseRuntimeMinutes } from "./TmdbClient";
 import { todayIso, formatDurationMinutes } from "./dateUtil";
 import { ConfirmModal } from "./ConfirmModal";
-import { pruneOmdbCache } from "./cachePrune";
+import { pruneTmdbCache } from "./cachePrune";
 import { topRatedGenres, excludeTracked, normalizeTitle } from "./recommendations";
 import { renderMetricsPanel } from "./metricsPanel";
 import { SortBy, SORT_OPTIONS, DEFAULT_SORT_BY, sortEntries } from "./sorting";
@@ -444,7 +444,7 @@ export class MoviesView extends ItemView {
   private async pruneCache(): Promise<void> {
     try {
       const liveImdbIds = this.plugin.getAllLiveImdbIds();
-      const { pruned, removedCount } = pruneOmdbCache(this.plugin.settings.tmdbCache, liveImdbIds);
+      const { pruned, removedCount } = pruneTmdbCache(this.plugin.settings.tmdbCache, liveImdbIds);
       if (removedCount === 0) return;
       this.plugin.settings.tmdbCache = pruned;
       await this.plugin.saveSettings();

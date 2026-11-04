@@ -26,7 +26,7 @@ export function computeCacheKeysToKeep(cacheKeys: string[], liveImdbIds: Set<str
  * Returns the pruned cache and how many entries were removed — callers
  * should skip persisting if removedCount is 0.
  */
-export function pruneOmdbCache<T>(
+export function pruneTmdbCache<T>(
   cache: Record<string, T>,
   liveImdbIds: Set<string>,
 ): { pruned: Record<string, T>; removedCount: number } {

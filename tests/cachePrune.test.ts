@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeCacheKeysToKeep, pruneOmdbCache } from "../src/cachePrune";
+import { computeCacheKeysToKeep, pruneTmdbCache } from "../src/cachePrune";
 
 describe("computeCacheKeysToKeep", () => {
   it("keeps series and season keys for live IMDb ids", () => {
@@ -40,28 +40,28 @@ describe("computeCacheKeysToKeep", () => {
   });
 });
 
-describe("pruneOmdbCache", () => {
+describe("pruneTmdbCache", () => {
   it("removes orphaned entries and reports a count", () => {
     const cache = {
       "tt001:series": { fetchedAt: 1, data: "a" },
       "tt001:1": { fetchedAt: 1, data: "b" },
       "tt999:series": { fetchedAt: 1, data: "c" },
     };
-    const { pruned, removedCount } = pruneOmdbCache(cache, new Set(["tt001"]));
+    const { pruned, removedCount } = pruneTmdbCache(cache, new Set(["tt001"]));
     expect(removedCount).toBe(1);
     expect(Object.keys(pruned).sort()).toEqual(["tt001:1", "tt001:series"]);
   });
 
   it("reports 0 removed and an equal cache when nothing is orphaned", () => {
     const cache = { "tt001:series": { fetchedAt: 1, data: "a" } };
-    const { pruned, removedCount } = pruneOmdbCache(cache, new Set(["tt001"]));
+    const { pruned, removedCount } = pruneTmdbCache(cache, new Set(["tt001"]));
     expect(removedCount).toBe(0);
     expect(pruned).toEqual(cache);
   });
 
   it("removes everything when live set is empty", () => {
     const cache = { "tt001:series": { fetchedAt: 1, data: "a" } };
-    const { pruned, removedCount } = pruneOmdbCache(cache, new Set());
+    const { pruned, removedCount } = pruneTmdbCache(cache, new Set());
     expect(removedCount).toBe(1);
     expect(pruned).toEqual({});
   });

@@ -67,10 +67,8 @@ never owning your data.
 
 Both sections search and fetch metadata from the free
 [TMDb API](https://www.themoviedb.org/settings/api) — you'll need your own
-key. TMDb was chosen over OMDb specifically because it indexes translated
-titles, so searching in a non-English language (e.g. Arabic) actually finds
-results — OMDb only matches a title's single primary (usually English)
-listing. Notes still store an IMDb URL in `source_url` for portability; the
+key. TMDb indexes translated titles, so searching in a non-English language
+(e.g. Arabic) actually finds results. Notes still store an IMDb URL in `source_url` for portability; the
 plugin resolves that to TMDb's internal id automatically whenever it needs
 to fetch data (via TMDb's `find` endpoint, cached permanently once resolved).
 

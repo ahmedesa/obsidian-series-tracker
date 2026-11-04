@@ -283,7 +283,7 @@ export type TmdbFetcher = (url: string) => Promise<{ json: unknown }>;
  * (via `find/{imdb_id}`, cached permanently under `<imdbId>:resolve` since
  * that mapping never changes) before fetching the actual data.
  *
- * Cache keys deliberately mirror the old OMDb client's `<imdbId>:series` /
+ * Cache keys deliberately keep the legacy `<imdbId>:series` /
  * `<imdbId>:<season>` scheme (plus the new `<imdbId>:resolve` entries) so
  * cachePrune.ts's IMDb-id-prefix pruning logic keeps working unmodified.
  *
