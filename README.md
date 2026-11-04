@@ -3,6 +3,8 @@
 # Series Tracker
 
 [![CI](https://github.com/ahmedesa/obsidian-series-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedesa/obsidian-series-tracker/actions/workflows/ci.yml)
+
+![Series Tracker demo](docs/demo.gif)
 [![Latest release](https://img.shields.io/github/v/release/ahmedesa/obsidian-series-tracker)](https://github.com/ahmedesa/obsidian-series-tracker/releases/latest)
 [![Obsidian community plugin](https://img.shields.io/badge/Obsidian-Community%20Plugin-8a63f2)](https://community.obsidian.md/plugins/series-tracker)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
